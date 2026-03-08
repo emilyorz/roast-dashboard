@@ -1,0 +1,10 @@
+# 原始資料（不進 git）
+roasts/
+roasts.tar.gz
+
+# Generated artifact
+data.js
+
+# Python
+__pycache__/
+*.pyc
