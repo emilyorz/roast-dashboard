@@ -4,13 +4,12 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>RoastTime Dashboard</title>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="./data.js"></script>
     <style>
       :root {
         --bg: #0f1114;
         --panel: #191d22;
         --panel-soft: #1f242b;
+        --panel-deep: #101419;
         --line: #323841;
         --text: #e8e8e4;
         --muted: #94a0ad;
@@ -69,7 +68,7 @@
           inset 0 0 0 1px rgba(255, 255, 255, 0.03);
       }
 
-      .panel h3 {
+      .panel h2 {
         margin: 0 0 10px;
         font-size: 13px;
         font-weight: 700;
@@ -98,11 +97,11 @@
       .kpi-grid {
         display: grid;
         grid-template-columns: repeat(4, 1fr);
-        gap: 10px;
+        gap: 12px;
       }
 
       .kpi-card {
-        background: #101419;
+        background: var(--panel-deep);
         border: 1px solid var(--line);
         border-left: 3px solid var(--accent);
         border-radius: 8px;
@@ -153,7 +152,7 @@
       .seq-header {
         font-size: 12px;
         font-weight: 700;
-        color: #d4d8de;
+        color: var(--text);
         margin-bottom: 8px;
         text-transform: uppercase;
         letter-spacing: 0.06em;
@@ -163,6 +162,9 @@
         display: flex;
         flex-direction: column;
         gap: 4px;
+        list-style: none;
+        margin: 0;
+        padding: 0;
       }
 
       .seq-row {
@@ -179,7 +181,7 @@
       .seq-num {
         width: 20px;
         text-align: center;
-        color: #555;
+        color: #6a7480;
         font-size: 11px;
         flex-shrink: 0;
       }
@@ -211,9 +213,10 @@
       }
 
       .seq-samples {
-        color: #444;
+        color: var(--muted);
         font-size: 10px;
         flex-shrink: 0;
+        opacity: 0.6;
       }
 
       @media (max-width: 980px) {
@@ -226,16 +229,25 @@
           grid-template-columns: repeat(2, 1fr);
         }
       }
+
+      @media (prefers-reduced-motion: reduce) {
+        * {
+          animation-duration: 0.01ms !important;
+          transition-duration: 0.01ms !important;
+        }
+      }
     </style>
   </head>
   <body>
-    <div class="wrap">
-      <h1 class="title">RoastTime Dashboard</h1>
-      <p class="subtitle" id="subtitle">Loading...</p>
+    <main class="wrap">
+      <header>
+        <h1 class="title">RoastTime Dashboard</h1>
+        <p class="subtitle" id="subtitle">Loading...</p>
+      </header>
 
       <div class="grid">
         <section class="panel kpi">
-          <h3>總覽</h3>
+          <h2>總覽</h2>
           <div class="kpi-grid">
             <div class="kpi-card">
               <div class="kpi-label">總烘豆次數</div>
@@ -258,44 +270,51 @@
         </section>
 
         <section class="panel span-6">
-          <h3>月度趨勢</h3>
-          <div class="chart-box"><canvas id="monthlyChart"></canvas></div>
+          <h2>月度趨勢</h2>
+          <div class="chart-box"><canvas id="monthlyChart" role="img" aria-label="月度烘豆次數趨勢折線圖"></canvas></div>
         </section>
 
         <section class="panel span-6">
-          <h3>烘焙時間分布</h3>
-          <div class="chart-box"><canvas id="timeChart"></canvas></div>
+          <h2>烘焙時間分布</h2>
+          <div class="chart-box"><canvas id="timeChart" role="img" aria-label="烘焙時間分布直方圖"></canvas></div>
         </section>
 
         <section class="panel span-6">
-          <h3>入豆 / 出豆溫度分布</h3>
-          <div class="chart-box"><canvas id="tempChart"></canvas></div>
+          <h2>入豆 / 出豆溫度分布</h2>
+          <div class="chart-box"><canvas id="tempChart" role="img" aria-label="入豆與出豆溫度分布直方圖"></canvas></div>
         </section>
 
         <section class="panel span-6">
-          <h3>豆量分布</h3>
-          <div class="chart-box"><canvas id="weightChart"></canvas></div>
+          <h2>豆量分布</h2>
+          <div class="chart-box"><canvas id="weightChart" role="img" aria-label="豆量分布直方圖"></canvas></div>
         </section>
 
         <section class="panel span-12">
-          <h3>烘焙度分布</h3>
+          <h2>烘焙度分布</h2>
           <div style="display:flex;gap:12px;height:290px;">
-            <div style="flex:1;min-width:0;"><canvas id="roastLevelDonut"></canvas></div>
-            <div style="flex:2;min-width:0;"><canvas id="roastLevelBar"></canvas></div>
+            <div style="flex:1;min-width:0;"><canvas id="roastLevelDonut" role="img" aria-label="烘焙度分布圓餅圖"></canvas></div>
+            <div style="flex:2;min-width:0;"><canvas id="roastLevelBar" role="img" aria-label="烘焙度月度堆疊長條圖"></canvas></div>
           </div>
         </section>
 
         <section class="panel span-12">
-          <h3>操作行為</h3>
-          <div class="chart-box"><canvas id="actionChart"></canvas></div>
+          <h2>操作行為</h2>
+          <div class="chart-box"><canvas id="actionChart" role="img" aria-label="Fan / Power / Drum 操作次數長條圖"></canvas></div>
           <div class="action-meta" id="actionMeta"></div>
           <div class="sequence" id="sequence"></div>
         </section>
       </div>
-    </div>
+    </main>
 
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="./data.js"></script>
     <script>
       const data = ROAST_DATA;
+
+      // disable animations for users who prefer reduced motion
+      if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+        Chart.defaults.animation = false;
+      }
 
       const commonOptions = {
         responsive: true,
@@ -336,6 +355,7 @@
         });
       }
 
+      document.title = `RoastTime Dashboard — ${data.meta.startDate} ~ ${data.meta.endDate}`;
       document.getElementById("subtitle").textContent =
         `資料範圍 ${data.meta.startDate} ~ ${data.meta.endDate} | 產生時間 ${data.meta.generatedAt}`;
 
@@ -361,7 +381,7 @@
               fill: true,
             },
             {
-              label: "3M MA",
+              label: "3M 均線",
               data: movingAvg(data.monthlyTrend.counts, 3),
               borderColor: "rgba(87,163,166,0.6)",
               backgroundColor: "transparent",
@@ -397,7 +417,7 @@
           labels: data.roastTimeHistogram.labels,
           datasets: [
             {
-              label: "Count",
+              label: "次數",
               data: data.roastTimeHistogram.counts,
               backgroundColor: "rgba(87,163,166,0.7)",
               borderColor: "#57a3a6",
@@ -466,7 +486,7 @@
           labels: ["F", "P", "D"],
           datasets: [
             {
-              label: "Action Count",
+              label: "操作次數",
               data: [
                 data.actionBehavior.countByType.F,
                 data.actionBehavior.countByType.P,
@@ -517,6 +537,7 @@
           maintainAspectRatio: false,
           plugins: {
             legend: { labels: { color: "#d4d8de", font: { size: 11 } } },
+            tooltip: commonOptions.plugins.tooltip,
           },
         },
       });
@@ -562,16 +583,16 @@
         const pct = s.avgPercent == null ? "-" : `${s.avgPercent}%`;
         const value = s.avgValue == null ? "-" : s.avgValue;
         const typeLabel = { F: "Fan", P: "Power", D: "Drum" }[s.name] || s.name || "?";
-        return `<div class="seq-row">
+        return `<li class="seq-row">
           <span class="seq-num">${s.step}</span>
           <span class="seq-badge seq-${s.name || "?"}">${s.name || "?"}</span>
           <span class="seq-value">${typeLabel} → ${value}</span>
           <span class="seq-timing">@ ${pct}</span>
           <span class="seq-samples">n=${s.sampleSize}</span>
-        </div>`;
+        </li>`;
       }).join("");
       document.getElementById("sequence").innerHTML =
-        `<div class="seq-header">平均一次烘焙的操作序列（前 8 步）</div><div class="seq-rows">${seqRows}</div>`;
+        `<div class="seq-header">平均一次烘焙的操作序列（前 8 步）</div><ol class="seq-rows" aria-label="操作序列">${seqRows}</ol>`;
     </script>
   </body>
 </html>
