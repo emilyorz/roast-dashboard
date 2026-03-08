@@ -1,0 +1,357 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>RoastTime Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="./data.js"></script>
+    <style>
+      :root {
+        --bg: #0f1114;
+        --panel: #191d22;
+        --panel-soft: #1f242b;
+        --line: #323841;
+        --text: #e8e8e4;
+        --muted: #94a0ad;
+        --accent: #d08f46;
+        --accent2: #57a3a6;
+        --accent3: #cf5f4a;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background:
+          radial-gradient(circle at 10% 10%, rgba(208, 143, 70, 0.08), transparent 40%),
+          radial-gradient(circle at 85% 20%, rgba(87, 163, 166, 0.07), transparent 45%),
+          var(--bg);
+        color: var(--text);
+        font-family: "JetBrains Mono", "IBM Plex Mono", Menlo, Consolas, monospace;
+      }
+
+      .wrap {
+        max-width: 1400px;
+        margin: 0 auto;
+        padding: 20px;
+      }
+
+      .title {
+        margin: 0 0 6px;
+        font-size: 26px;
+        letter-spacing: 0.04em;
+      }
+
+      .subtitle {
+        margin: 0 0 18px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(12, 1fr);
+        gap: 12px;
+      }
+
+      .panel {
+        background: linear-gradient(180deg, var(--panel) 0%, var(--panel-soft) 100%);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 14px;
+        min-height: 220px;
+        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.02);
+      }
+
+      .panel h3 {
+        margin: 0 0 10px;
+        font-size: 13px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--muted);
+      }
+
+      .panel.kpi {
+        grid-column: span 12;
+        min-height: auto;
+      }
+
+      .panel.span-6 {
+        grid-column: span 6;
+      }
+
+      .panel.span-4 {
+        grid-column: span 4;
+      }
+
+      .panel.span-12 {
+        grid-column: span 12;
+      }
+
+      .kpi-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 10px;
+      }
+
+      .kpi-card {
+        background: #101419;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 10px;
+      }
+
+      .kpi-label {
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .kpi-value {
+        margin-top: 4px;
+        font-size: 25px;
+        font-weight: 700;
+        color: var(--text);
+      }
+
+      .kpi-sub {
+        margin-top: 2px;
+        font-size: 11px;
+        color: var(--muted);
+      }
+
+      .chart-box {
+        height: 290px;
+      }
+
+      .action-meta {
+        margin-top: 10px;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+        font-size: 12px;
+      }
+
+      .sequence {
+        margin-top: 10px;
+        border-top: 1px dashed var(--line);
+        padding-top: 8px;
+        font-size: 12px;
+        color: var(--muted);
+        line-height: 1.5;
+      }
+
+      @media (max-width: 980px) {
+        .panel.span-6,
+        .panel.span-4 {
+          grid-column: span 12;
+        }
+
+        .kpi-grid {
+          grid-template-columns: repeat(2, 1fr);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <h1 class="title">RoastTime Dashboard</h1>
+      <p class="subtitle" id="subtitle">Loading...</p>
+
+      <div class="grid">
+        <section class="panel kpi">
+          <h3>Panel 1: KPI Header</h3>
+          <div class="kpi-grid">
+            <div class="kpi-card">
+              <div class="kpi-label">總烘豆次數</div>
+              <div class="kpi-value" id="kpi-total">-</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-label">本月烘豆次數</div>
+              <div class="kpi-value" id="kpi-month">-</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-label">本週烘豆次數</div>
+              <div class="kpi-value" id="kpi-week">-</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-label">平均烘焙時間</div>
+              <div class="kpi-value" id="kpi-avg">-</div>
+              <div class="kpi-sub" id="kpi-range">-</div>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel span-6">
+          <h3>Panel 2: 月度趨勢</h3>
+          <div class="chart-box"><canvas id="monthlyChart"></canvas></div>
+        </section>
+
+        <section class="panel span-6">
+          <h3>Panel 3: 烘焙時間分布</h3>
+          <div class="chart-box"><canvas id="timeChart"></canvas></div>
+        </section>
+
+        <section class="panel span-6">
+          <h3>Panel 4: 入豆/出豆溫度分布</h3>
+          <div class="chart-box"><canvas id="tempChart"></canvas></div>
+        </section>
+
+        <section class="panel span-6">
+          <h3>Panel 5: 豆量分布（weightGreen &gt; 0）</h3>
+          <div class="chart-box"><canvas id="weightChart"></canvas></div>
+        </section>
+
+        <section class="panel span-12">
+          <h3>Panel 6: 操作行為</h3>
+          <div class="chart-box"><canvas id="actionChart"></canvas></div>
+          <div class="action-meta" id="actionMeta"></div>
+          <div class="sequence" id="sequence"></div>
+        </section>
+      </div>
+    </div>
+
+    <script>
+      const data = ROAST_DATA;
+
+      const commonOptions = {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            labels: { color: "#d4d8de" },
+          },
+        },
+        scales: {
+          x: {
+            ticks: { color: "#aab4be", maxRotation: 80, minRotation: 40 },
+            grid: { color: "rgba(220,220,220,0.06)" },
+          },
+          y: {
+            ticks: { color: "#aab4be" },
+            grid: { color: "rgba(220,220,220,0.06)" },
+          },
+        },
+      };
+
+      document.getElementById("subtitle").textContent =
+        `資料範圍 ${data.meta.startDate} ~ ${data.meta.endDate} | 產生時間 ${data.meta.generatedAt}`;
+
+      document.getElementById("kpi-total").textContent = data.kpis.totalRoasts;
+      document.getElementById("kpi-month").textContent = data.kpis.thisMonth;
+      document.getElementById("kpi-week").textContent = data.kpis.thisWeek;
+      document.getElementById("kpi-avg").textContent = data.kpis.avgRoastTimeLabel;
+      document.getElementById("kpi-range").textContent = data.kpis.dateRange;
+
+      new Chart(document.getElementById("monthlyChart"), {
+        type: "line",
+        data: {
+          labels: data.monthlyTrend.labels,
+          datasets: [
+            {
+              label: "Roasts / Month",
+              data: data.monthlyTrend.counts,
+              borderColor: "#d08f46",
+              backgroundColor: "rgba(208,143,70,0.2)",
+              borderWidth: 2,
+              tension: 0.2,
+              pointRadius: 2,
+            },
+          ],
+        },
+        options: commonOptions,
+      });
+
+      new Chart(document.getElementById("timeChart"), {
+        type: "bar",
+        data: {
+          labels: data.roastTimeHistogram.labels,
+          datasets: [
+            {
+              label: "Count",
+              data: data.roastTimeHistogram.counts,
+              backgroundColor: "rgba(87,163,166,0.7)",
+              borderColor: "#57a3a6",
+              borderWidth: 1,
+            },
+          ],
+        },
+        options: commonOptions,
+      });
+
+      new Chart(document.getElementById("tempChart"), {
+        type: "bar",
+        data: {
+          labels: data.temperatureHistogram.labels,
+          datasets: [
+            {
+              label: "Charge Temp",
+              data: data.temperatureHistogram.chargeCounts,
+              backgroundColor: "rgba(208,143,70,0.7)",
+            },
+            {
+              label: "Drop Temp",
+              data: data.temperatureHistogram.dropCounts,
+              backgroundColor: "rgba(207,95,74,0.7)",
+            },
+          ],
+        },
+        options: commonOptions,
+      });
+
+      new Chart(document.getElementById("weightChart"), {
+        type: "bar",
+        data: {
+          labels: data.weightHistogram.labels,
+          datasets: [
+            {
+              label: `Recorded (${data.weightHistogram.recordedCount})`,
+              data: data.weightHistogram.counts,
+              backgroundColor: "rgba(127, 171, 95, 0.75)",
+            },
+          ],
+        },
+        options: commonOptions,
+      });
+
+      new Chart(document.getElementById("actionChart"), {
+        type: "bar",
+        data: {
+          labels: ["F", "P", "D"],
+          datasets: [
+            {
+              label: "Action Count",
+              data: [
+                data.actionBehavior.countByType.F,
+                data.actionBehavior.countByType.P,
+                data.actionBehavior.countByType.D,
+              ],
+              backgroundColor: ["#57a3a6", "#d08f46", "#cf5f4a"],
+            },
+          ],
+        },
+        options: commonOptions,
+      });
+
+      const avgPct = data.actionBehavior.avgPercentByType;
+      document.getElementById("actionMeta").innerHTML =
+        `<div>F 平均觸發時間: ${avgPct.F ?? "-"}%</div>` +
+        `<div>P 平均觸發時間: ${avgPct.P ?? "-"}%</div>` +
+        `<div>D 平均觸發時間: ${avgPct.D ?? "-"}%</div>` +
+        `<div>未記錄豆量: ${data.weightHistogram.missingCount} 筆</div>`;
+
+      const sequence = data.actionBehavior.averageSequence
+        .map((s) => {
+          const pct = s.avgPercent == null ? "-" : `${s.avgPercent}%`;
+          const value = s.avgValue == null ? "-" : s.avgValue;
+          return `${s.step}. ${s.name || "?"}${value} @ ${pct}`;
+        })
+        .join("<br>");
+      document.getElementById("sequence").innerHTML =
+        `<strong style="color:#d4d8de">平均一次烘焙的操作序列（前 8 步）</strong><br>${sequence}`;
+    </script>
+  </body>
+</html>

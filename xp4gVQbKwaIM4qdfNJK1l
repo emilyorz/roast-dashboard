@@ -1,0 +1,85 @@
+{
+  "beanChargeTemperature": 169.8,
+  "beanDropTemperature": 169.9,
+  "drumChargeTemperature": 309,
+  "drumDropTemperature": 309.1,
+  "beanTemperature": [
+    169.8,
+    169.8,
+    169.8,
+    169.8,
+    169.9
+  ],
+  "drumTemperature": [
+    309,
+    309.2,
+    308.9,
+    308.8,
+    309.1
+  ],
+  "beanDerivative": [
+    1,
+    1,
+    1.3,
+    1.4,
+    1.2
+  ],
+  "ibtsDerivative": [
+    null,
+    0,
+    6,
+    -9,
+    -3
+  ],
+  "exitTemperature": [
+    0,
+    0,
+    0,
+    0,
+    0
+  ],
+  "preheatTemperature": 310,
+  "roastStartIndex": 0,
+  "roastEndIndex": 5,
+  "totalRoastTime": 1911,
+  "indexFirstCrackStart": 0,
+  "indexFirstCrackEnd": 0,
+  "indexSecondCrackStart": 0,
+  "indexSecondCrackEnd": 0,
+  "indexYellowingStart": 0,
+  "weightGreen": 0,
+  "weightRoasted": 0,
+  "roastNumber": 4450,
+  "sampleRate": 2,
+  "serialNumber": 788,
+  "hardware": 50462976,
+  "IRSensor": 2,
+  "firmware": 596,
+  "actions": {
+    "actionTempList": [],
+    "actionTimeList": [
+      {
+        "ctrlType": 0,
+        "index": 1,
+        "value": 3
+      },
+      {
+        "ctrlType": 1,
+        "index": 1,
+        "value": 0
+      },
+      {
+        "ctrlType": 2,
+        "index": 1,
+        "value": 0
+      }
+    ]
+  },
+  "missingSeconds": [],
+  "rorPreheat": 100.9,
+  "uid": "xp4gVQbKwaIM4qdfNJK1l",
+  "userId": "CDya8_VOI29wU7hYNygqQ",
+  "dateTime": 1649332359319,
+  "softwareVersion": "3.4.0",
+  "firmwareVersion": 596
+}
