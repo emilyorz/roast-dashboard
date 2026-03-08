@@ -270,7 +270,22 @@
             },
           ],
         },
-        options: commonOptions,
+        options: {
+          ...commonOptions,
+          scales: {
+            ...commonOptions.scales,
+            x: {
+              ...commonOptions.scales.x,
+              ticks: {
+                ...commonOptions.scales.x.ticks,
+                // 每季顯示一個標籤（每 3 個月）
+                callback: function(val, idx) {
+                  return idx % 3 === 0 ? this.getLabelForValue(val) : "";
+                },
+              },
+            },
+          },
+        },
       });
 
       new Chart(document.getElementById("timeChart"), {
@@ -351,31 +366,27 @@
         `<div>D 平均觸發時間: ${avgPct.D ?? "-"}%</div>` +
         `<div>未記錄豆量: ${data.weightHistogram.missingCount} 筆</div>`;
 
-      const roastLevelColors = {
-        Light: "#f5d87a",
-        Medium: "#d08f46",
-        MediumDark: "#9b5e2a",
-        Dark: "#4a2010",
-        Unknown: "#555",
-      };
-      const roastLevelLabels = {
-        Light: "淺烘 Light",
-        Medium: "中烘 Medium",
-        MediumDark: "中深烘 Medium-Dark",
-        Dark: "深烘 Dark",
-        Unknown: "未知",
-      };
-      const rlLevels = ["Light", "Medium", "MediumDark", "Dark", "Unknown"];
+      // fix1: 用 ordered array of objects 避免順序依賴 object key
+      const RL_DEFS = [
+        { key: "Light",      label: "淺烘 Light",            color: "#f5d87a" },
+        { key: "Medium",     label: "中烘 Medium",           color: "#d08f46" },
+        { key: "MediumDark", label: "中深烘 Medium-Dark",    color: "#9b5e2a" },
+        { key: "Dark",       label: "深烘 Dark",             color: "#4a2010" },
+        { key: "Unknown",    label: "未知",                  color: "#555"    },
+      ];
       const rlCounts = data.roastLevel.counts;
+
+      // fix1: filter 掉 count=0 的類別（Unknown=0 不顯示）
+      const rlDonutDefs = RL_DEFS.filter((d) => rlCounts[d.key] > 0);
 
       new Chart(document.getElementById("roastLevelDonut"), {
         type: "doughnut",
         data: {
-          labels: rlLevels.map((l) => roastLevelLabels[l]),
+          labels: rlDonutDefs.map((d) => d.label),
           datasets: [
             {
-              data: rlLevels.map((l) => rlCounts[l]),
-              backgroundColor: rlLevels.map((l) => roastLevelColors[l]),
+              data: rlDonutDefs.map((d) => rlCounts[d.key]),
+              backgroundColor: rlDonutDefs.map((d) => d.color),
               borderColor: "#191d22",
               borderWidth: 2,
             },
@@ -391,25 +402,40 @@
       });
 
       const rlByMonth = data.roastLevel.roastLevelByMonth;
+      // fix2: 每季顯示一個 X 軸標籤（每 3 個月取一次）
+      const rlBarOptions = {
+        ...commonOptions,
+        scales: {
+          ...commonOptions.scales,
+          x: {
+            ...commonOptions.scales.x,
+            stacked: true,
+            ticks: {
+              ...commonOptions.scales.x.ticks,
+              callback: function(val, idx) {
+                return idx % 3 === 0 ? this.getLabelForValue(val) : "";
+              },
+            },
+          },
+          y: { ...commonOptions.scales.y, stacked: true },
+        },
+      };
+
       new Chart(document.getElementById("roastLevelBar"), {
         type: "bar",
         data: {
           labels: rlByMonth.labels,
-          datasets: rlLevels.map((l) => ({
-            label: roastLevelLabels[l],
-            data: rlByMonth[l],
-            backgroundColor: roastLevelColors[l],
-            stack: "roastLevel",
-          })),
+          // fix1: 用 RL_DEFS 順序，filter 掉全為 0 的類別
+          datasets: RL_DEFS
+            .filter((d) => rlCounts[d.key] > 0)
+            .map((d) => ({
+              label: d.label,
+              data: rlByMonth[d.key],
+              backgroundColor: d.color,
+              stack: "roastLevel",
+            })),
         },
-        options: {
-          ...commonOptions,
-          scales: {
-            ...commonOptions.scales,
-            x: { ...commonOptions.scales.x, stacked: true },
-            y: { ...commonOptions.scales.y, stacked: true },
-          },
-        },
+        options: rlBarOptions,
       });
 
       const sequence = data.actionBehavior.averageSequence
