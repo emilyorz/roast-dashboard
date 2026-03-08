@@ -149,7 +149,7 @@ def build_data(roasts):
             roast_times.append(total_time)
 
         charge = to_float(record.get("beanChargeTemperature"))
-        if charge is not None:
+        if charge is not None and charge > 100:  # filter out 0/invalid charge temps
             charge_temps.append(charge)
 
         drop = to_float(record.get("beanDropTemperature"))
