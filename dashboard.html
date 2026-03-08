@@ -4,18 +4,24 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>RoastTime Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@300;400;500;600&family=Playfair+Display:wght@700;900&display=swap" rel="stylesheet" />
     <style>
       :root {
-        --bg: #0f1114;
-        --panel: #191d22;
-        --panel-soft: #1f242b;
-        --panel-deep: #101419;
-        --line: #323841;
-        --text: #e8e8e4;
-        --muted: #94a0ad;
-        --accent: #d08f46;
-        --accent2: #57a3a6;
-        --accent3: #cf5f4a;
+        --bg: #0d0b08;
+        --panel: #161209;
+        --panel-soft: #1c1710;
+        --panel-deep: #0a0805;
+        --line: #2c2318;
+        --text: #f2ebe0;
+        --muted: #9a8c7a;
+        --accent: #c97f32;
+        --accent2: #6d9e96;
+        --accent3: #b85540;
+        --font-display: "Playfair Display", Georgia, serif;
+        --font-body: "Barlow", system-ui, sans-serif;
+        --font-mono: "JetBrains Mono", "IBM Plex Mono", monospace;
       }
 
       * {
@@ -25,55 +31,67 @@
       body {
         margin: 0;
         background:
-          radial-gradient(circle at 10% 10%, rgba(208, 143, 70, 0.08), transparent 40%),
-          radial-gradient(circle at 85% 20%, rgba(87, 163, 166, 0.07), transparent 45%),
+          radial-gradient(ellipse at 5% 0%, rgba(200, 127, 50, 0.14) 0%, transparent 45%),
+          radial-gradient(ellipse at 95% 85%, rgba(184, 85, 64, 0.09) 0%, transparent 40%),
           var(--bg);
         color: var(--text);
-        font-family: "JetBrains Mono", "IBM Plex Mono", Menlo, Consolas, monospace;
+        font-family: var(--font-body);
+        line-height: 1.5;
       }
 
       .wrap {
         max-width: 1400px;
         margin: 0 auto;
-        padding: 20px;
+        padding: 28px 24px;
+      }
+
+      header {
+        margin-bottom: 28px;
       }
 
       .title {
         margin: 0 0 6px;
-        font-size: 26px;
-        letter-spacing: 0.04em;
+        font-family: var(--font-display);
+        font-size: 38px;
+        font-weight: 900;
+        letter-spacing: -0.01em;
+        line-height: 1.1;
+        color: var(--text);
       }
 
       .subtitle {
-        margin: 0 0 18px;
+        margin: 0;
         color: var(--muted);
         font-size: 13px;
+        font-weight: 300;
+        letter-spacing: 0.01em;
       }
 
       .grid {
         display: grid;
         grid-template-columns: repeat(12, 1fr);
-        gap: 12px;
+        gap: 14px;
       }
 
       .panel {
-        background: linear-gradient(180deg, var(--panel) 0%, var(--panel-soft) 100%);
+        background: linear-gradient(160deg, var(--panel) 0%, var(--panel-soft) 100%);
         border: 1px solid var(--line);
-        border-radius: 14px;
-        padding: 16px;
+        border-radius: 6px;
+        padding: 20px 24px;
         min-height: 220px;
         box-shadow:
-          0 4px 24px rgba(0, 0, 0, 0.5),
-          0 1px 4px rgba(0, 0, 0, 0.3),
-          inset 0 0 0 1px rgba(255, 255, 255, 0.03);
+          0 6px 32px rgba(0, 0, 0, 0.6),
+          0 1px 4px rgba(0, 0, 0, 0.4),
+          inset 0 1px 0 rgba(255, 255, 255, 0.04);
       }
 
       .panel h2 {
-        margin: 0 0 10px;
-        font-size: 13px;
-        font-weight: 700;
+        margin: 0 0 16px;
+        font-family: var(--font-body);
+        font-size: 11px;
+        font-weight: 600;
         text-transform: uppercase;
-        letter-spacing: 0.08em;
+        letter-spacing: 0.12em;
         color: var(--muted);
       }
 
@@ -94,74 +112,121 @@
         grid-column: span 12;
       }
 
-      .kpi-grid {
-        display: grid;
-        grid-template-columns: repeat(4, 1fr);
-        gap: 12px;
+      /* ── KPI strip ─────────────────────────────────── */
+
+      .kpi-strip {
+        display: flex;
+        align-items: center;
+        gap: 0;
+        min-height: 100px;
       }
 
-      .kpi-card {
-        background: var(--panel-deep);
-        border: 1px solid var(--line);
-        border-left: 3px solid var(--accent);
-        border-radius: 8px;
-        padding: 12px 14px;
-        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4);
+      .kpi-hero {
+        padding-right: 40px;
+        border-right: 1px solid var(--line);
+        flex-shrink: 0;
       }
 
-      .kpi-label {
-        color: var(--muted);
-        font-size: 12px;
-        text-transform: uppercase;
-        letter-spacing: 0.06em;
-      }
-
-      .kpi-value {
-        margin-top: 6px;
-        font-size: 36px;
+      .kpi-hero-num {
+        font-family: var(--font-mono);
+        font-size: 72px;
         font-weight: 700;
         color: var(--text);
         line-height: 1;
-        letter-spacing: -0.02em;
+        letter-spacing: -0.04em;
       }
 
-      .kpi-sub {
-        margin-top: 4px;
+      .kpi-hero-label {
         font-size: 11px;
+        font-weight: 600;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        margin-top: 10px;
+      }
+
+      .kpi-hero-range {
+        font-size: 11px;
+        font-weight: 300;
+        color: var(--muted);
+        margin-top: 3px;
+        opacity: 0.75;
+      }
+
+      .kpi-secondary {
+        display: flex;
+        align-items: center;
+        flex: 1;
+        padding-left: 40px;
+      }
+
+      .kpi-stat {
+        flex: 1;
+        padding: 0 32px 0 0;
+      }
+
+      .kpi-stat:not(:first-child) {
+        padding-left: 32px;
+        border-left: 1px solid var(--line);
+      }
+
+      .kpi-stat-num {
+        font-family: var(--font-mono);
+        font-size: 40px;
+        font-weight: 700;
+        color: var(--text);
+        line-height: 1;
+        letter-spacing: -0.03em;
+      }
+
+      .kpi-stat-label {
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        margin-top: 8px;
+      }
+
+      /* ── Charts ────────────────────────────────────── */
+
+      .chart-box {
+        height: 280px;
+      }
+
+      /* ── Action meta ───────────────────────────────── */
+
+      .action-meta {
+        margin-top: 12px;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 6px;
+        font-size: 12px;
+        font-weight: 400;
         color: var(--muted);
       }
 
-      .chart-box {
-        height: 290px;
-      }
-
-      .action-meta {
-        margin-top: 10px;
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 8px;
-        font-size: 12px;
-      }
+      /* ── Sequence ──────────────────────────────────── */
 
       .sequence {
-        margin-top: 10px;
-        border-top: 1px dashed var(--line);
-        padding-top: 8px;
+        margin-top: 12px;
+        border-top: 1px solid var(--line);
+        padding-top: 12px;
       }
 
       .seq-header {
-        font-size: 12px;
-        font-weight: 700;
-        color: var(--text);
-        margin-bottom: 8px;
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--muted);
+        margin-bottom: 10px;
         text-transform: uppercase;
-        letter-spacing: 0.06em;
+        letter-spacing: 0.1em;
       }
 
       .seq-rows {
         display: flex;
         flex-direction: column;
-        gap: 4px;
+        gap: 3px;
         list-style: none;
         margin: 0;
         padding: 0;
@@ -172,10 +237,11 @@
         align-items: center;
         gap: 10px;
         padding: 5px 8px;
-        background: rgba(255, 255, 255, 0.02);
-        border-radius: 6px;
-        border: 1px solid rgba(255, 255, 255, 0.04);
+        background: rgba(255, 255, 255, 0.015);
+        border-radius: 3px;
+        border: 1px solid rgba(255, 255, 255, 0.03);
         font-size: 12px;
+        font-weight: 400;
       }
 
       .seq-num {
@@ -184,6 +250,7 @@
         color: #6a7480;
         font-size: 11px;
         flex-shrink: 0;
+        font-family: var(--font-mono);
       }
 
       .seq-badge {
@@ -191,33 +258,39 @@
         height: 20px;
         line-height: 20px;
         text-align: center;
-        border-radius: 4px;
+        border-radius: 3px;
         font-weight: 700;
         font-size: 11px;
         flex-shrink: 0;
+        font-family: var(--font-mono);
       }
 
-      .seq-F { background: rgba(87, 163, 166, 0.2); color: #57a3a6; }
-      .seq-P { background: rgba(208, 143, 70, 0.2); color: #d08f46; }
-      .seq-D { background: rgba(207, 95, 74, 0.2); color: #cf5f4a; }
+      .seq-F { background: rgba(109, 158, 150, 0.2); color: #6d9e96; }
+      .seq-P { background: rgba(201, 127, 50, 0.2); color: #c97f32; }
+      .seq-D { background: rgba(184, 85, 64, 0.2); color: #b85540; }
 
       .seq-value {
         color: var(--text);
         flex: 1;
+        font-weight: 400;
       }
 
       .seq-timing {
         color: var(--accent);
         font-size: 11px;
         flex-shrink: 0;
+        font-family: var(--font-mono);
       }
 
       .seq-samples {
         color: var(--muted);
         font-size: 10px;
         flex-shrink: 0;
+        font-family: var(--font-mono);
         opacity: 0.6;
       }
+
+      /* ── Responsive ────────────────────────────────── */
 
       @media (max-width: 980px) {
         .panel.span-6,
@@ -225,8 +298,37 @@
           grid-column: span 12;
         }
 
-        .kpi-grid {
-          grid-template-columns: repeat(2, 1fr);
+        .kpi-strip {
+          flex-direction: column;
+          align-items: flex-start;
+          gap: 20px;
+        }
+
+        .kpi-hero {
+          padding-right: 0;
+          border-right: none;
+          border-bottom: 1px solid var(--line);
+          padding-bottom: 20px;
+          width: 100%;
+        }
+
+        .kpi-secondary {
+          padding-left: 0;
+          flex-wrap: wrap;
+          gap: 16px;
+        }
+
+        .kpi-stat {
+          flex: 0 0 calc(50% - 8px);
+        }
+
+        .kpi-stat:not(:first-child) {
+          padding-left: 0;
+          border-left: none;
+        }
+
+        .kpi-hero-num {
+          font-size: 56px;
         }
       }
 
@@ -247,24 +349,25 @@
 
       <div class="grid">
         <section class="panel kpi">
-          <h2>總覽</h2>
-          <div class="kpi-grid">
-            <div class="kpi-card">
-              <div class="kpi-label">總烘豆次數</div>
-              <div class="kpi-value" id="kpi-total">-</div>
+          <div class="kpi-strip">
+            <div class="kpi-hero">
+              <div class="kpi-hero-num" id="kpi-total">-</div>
+              <div class="kpi-hero-label">烘豆總次數</div>
+              <div class="kpi-hero-range" id="kpi-range">-</div>
             </div>
-            <div class="kpi-card">
-              <div class="kpi-label">本月烘豆次數</div>
-              <div class="kpi-value" id="kpi-month">-</div>
-            </div>
-            <div class="kpi-card">
-              <div class="kpi-label">本週烘豆次數</div>
-              <div class="kpi-value" id="kpi-week">-</div>
-            </div>
-            <div class="kpi-card">
-              <div class="kpi-label">平均烘焙時間</div>
-              <div class="kpi-value" id="kpi-avg">-</div>
-              <div class="kpi-sub" id="kpi-range">-</div>
+            <div class="kpi-secondary">
+              <div class="kpi-stat">
+                <div class="kpi-stat-num" id="kpi-month">-</div>
+                <div class="kpi-stat-label">本月烘豆</div>
+              </div>
+              <div class="kpi-stat">
+                <div class="kpi-stat-num" id="kpi-week">-</div>
+                <div class="kpi-stat-label">本週烘豆</div>
+              </div>
+              <div class="kpi-stat">
+                <div class="kpi-stat-num" id="kpi-avg">-</div>
+                <div class="kpi-stat-label">平均烘焙時間</div>
+              </div>
             </div>
           </div>
         </section>
@@ -291,7 +394,7 @@
 
         <section class="panel span-12">
           <h2>烘焙度分布</h2>
-          <div style="display:flex;gap:12px;height:290px;">
+          <div style="display:flex;gap:12px;height:280px;">
             <div style="flex:1;min-width:0;"><canvas id="roastLevelDonut" role="img" aria-label="烘焙度分布圓餅圖"></canvas></div>
             <div style="flex:2;min-width:0;"><canvas id="roastLevelBar" role="img" aria-label="烘焙度月度堆疊長條圖"></canvas></div>
           </div>
@@ -316,33 +419,40 @@
         Chart.defaults.animation = false;
       }
 
+      const WARM_TICK   = "#8a7c6c";
+      const WARM_GRID   = "rgba(240,228,210,0.04)";
+      const WARM_LEGEND = "#c8bfb0";
+
       const commonOptions = {
         responsive: true,
         maintainAspectRatio: false,
         plugins: {
           legend: {
-            labels: { color: "#d4d8de" },
+            labels: {
+              color: WARM_LEGEND,
+              font: { family: "'Barlow', sans-serif", size: 12 },
+            },
           },
           tooltip: {
-            backgroundColor: "rgba(15, 17, 20, 0.95)",
-            borderColor: "#323841",
+            backgroundColor: "rgba(10, 8, 5, 0.96)",
+            borderColor: "#2c2318",
             borderWidth: 1,
-            titleColor: "#e8e8e4",
-            bodyColor: "#94a0ad",
+            titleColor: "#f2ebe0",
+            bodyColor: "#9a8c7a",
             padding: 10,
-            cornerRadius: 8,
-            titleFont: { family: "'JetBrains Mono', monospace", size: 12 },
-            bodyFont: { family: "'JetBrains Mono', monospace", size: 12 },
+            cornerRadius: 4,
+            titleFont: { family: "'Barlow', sans-serif", size: 13, weight: "600" },
+            bodyFont:  { family: "'Barlow', sans-serif", size: 12 },
           },
         },
         scales: {
           x: {
-            ticks: { color: "#aab4be", maxRotation: 80, minRotation: 40 },
-            grid: { color: "rgba(220,220,220,0.04)" },
+            ticks: { color: WARM_TICK, maxRotation: 80, minRotation: 40, font: { family: "'Barlow', sans-serif", size: 11 } },
+            grid: { color: WARM_GRID },
           },
           y: {
-            ticks: { color: "#aab4be" },
-            grid: { color: "rgba(220,220,220,0.04)" },
+            ticks: { color: WARM_TICK, font: { family: "'Barlow', sans-serif", size: 11 } },
+            grid: { color: WARM_GRID },
           },
         },
       };
@@ -361,8 +471,8 @@
 
       document.getElementById("kpi-total").textContent = data.kpis.totalRoasts;
       document.getElementById("kpi-month").textContent = data.kpis.thisMonth;
-      document.getElementById("kpi-week").textContent = data.kpis.thisWeek;
-      document.getElementById("kpi-avg").textContent = data.kpis.avgRoastTimeLabel;
+      document.getElementById("kpi-week").textContent  = data.kpis.thisWeek;
+      document.getElementById("kpi-avg").textContent   = data.kpis.avgRoastTimeLabel;
       document.getElementById("kpi-range").textContent = data.kpis.dateRange;
 
       new Chart(document.getElementById("monthlyChart"), {
@@ -373,17 +483,18 @@
             {
               label: "Roasts / Month",
               data: data.monthlyTrend.counts,
-              borderColor: "#d08f46",
-              backgroundColor: "rgba(208,143,70,0.15)",
+              borderColor: "#c97f32",
+              backgroundColor: "rgba(201,127,50,0.12)",
               borderWidth: 2,
               tension: 0.2,
               pointRadius: 3,
+              pointBackgroundColor: "#c97f32",
               fill: true,
             },
             {
               label: "3M 均線",
               data: movingAvg(data.monthlyTrend.counts, 3),
-              borderColor: "rgba(87,163,166,0.6)",
+              borderColor: "rgba(109,158,150,0.6)",
               backgroundColor: "transparent",
               borderWidth: 1.5,
               borderDash: [5, 4],
@@ -401,7 +512,6 @@
               ...commonOptions.scales.x,
               ticks: {
                 ...commonOptions.scales.x.ticks,
-                // 每季顯示一個標籤（每 3 個月）
                 callback: function(val, idx) {
                   return idx % 3 === 0 ? this.getLabelForValue(val) : "";
                 },
@@ -419,8 +529,8 @@
             {
               label: "次數",
               data: data.roastTimeHistogram.counts,
-              backgroundColor: "rgba(87,163,166,0.7)",
-              borderColor: "#57a3a6",
+              backgroundColor: "rgba(109,158,150,0.72)",
+              borderColor: "#6d9e96",
               borderWidth: 1,
             },
           ],
@@ -432,10 +542,10 @@
             x: {
               ...commonOptions.scales.x,
               ticks: {
-                color: "#aab4be",
+                color: WARM_TICK,
                 maxRotation: 45,
                 minRotation: 45,
-                // 每 3 個 bin 顯示一個標籤
+                font: { family: "'Barlow', sans-serif", size: 11 },
                 callback: function(val, idx) {
                   return idx % 3 === 0 ? this.getLabelForValue(val) : "";
                 },
@@ -453,12 +563,12 @@
             {
               label: "Charge Temp",
               data: data.temperatureHistogram.chargeCounts,
-              backgroundColor: "rgba(208,143,70,0.7)",
+              backgroundColor: "rgba(201,127,50,0.75)",
             },
             {
               label: "Drop Temp",
               data: data.temperatureHistogram.dropCounts,
-              backgroundColor: "rgba(207,95,74,0.7)",
+              backgroundColor: "rgba(184,85,64,0.75)",
             },
           ],
         },
@@ -473,7 +583,7 @@
             {
               label: `Recorded (${data.weightHistogram.recordedCount})`,
               data: data.weightHistogram.counts,
-              backgroundColor: "rgba(127, 171, 95, 0.75)",
+              backgroundColor: "rgba(109,158,80,0.72)",
             },
           ],
         },
@@ -492,7 +602,7 @@
                 data.actionBehavior.countByType.P,
                 data.actionBehavior.countByType.D,
               ],
-              backgroundColor: ["#57a3a6", "#d08f46", "#cf5f4a"],
+              backgroundColor: ["#6d9e96", "#c97f32", "#b85540"],
             },
           ],
         },
@@ -506,17 +616,15 @@
         `<div>D 平均觸發時間: ${avgPct.D ?? "-"}%</div>` +
         `<div>未記錄豆量: ${data.weightHistogram.missingCount} 筆</div>`;
 
-      // fix1: 用 ordered array of objects 避免順序依賴 object key
       const RL_DEFS = [
-        { key: "Light",      label: "淺烘 Light",            color: "#f5d87a" },
-        { key: "Medium",     label: "中烘 Medium",           color: "#d08f46" },
-        { key: "MediumDark", label: "中深烘 Medium-Dark",    color: "#9b5e2a" },
-        { key: "Dark",       label: "深烘 Dark",             color: "#4a2010" },
-        { key: "Unknown",    label: "未知",                  color: "#555"    },
+        { key: "Light",      label: "淺烘 Light",          color: "#f5d87a" },
+        { key: "Medium",     label: "中烘 Medium",          color: "#c97f32" },
+        { key: "MediumDark", label: "中深烘 Medium-Dark",   color: "#9b5e2a" },
+        { key: "Dark",       label: "深烘 Dark",            color: "#4a2010" },
+        { key: "Unknown",    label: "未知",                 color: "#555"    },
       ];
       const rlCounts = data.roastLevel.counts;
 
-      // fix1: filter 掉 count=0 的類別（Unknown=0 不顯示）
       const rlDonutDefs = RL_DEFS.filter((d) => rlCounts[d.key] > 0);
 
       new Chart(document.getElementById("roastLevelDonut"), {
@@ -527,7 +635,7 @@
             {
               data: rlDonutDefs.map((d) => rlCounts[d.key]),
               backgroundColor: rlDonutDefs.map((d) => d.color),
-              borderColor: "#191d22",
+              borderColor: "#161209",
               borderWidth: 2,
             },
           ],
@@ -536,14 +644,18 @@
           responsive: true,
           maintainAspectRatio: false,
           plugins: {
-            legend: { labels: { color: "#d4d8de", font: { size: 11 } } },
+            legend: {
+              labels: {
+                color: WARM_LEGEND,
+                font: { family: "'Barlow', sans-serif", size: 11 },
+              },
+            },
             tooltip: commonOptions.plugins.tooltip,
           },
         },
       });
 
       const rlByMonth = data.roastLevel.roastLevelByMonth;
-      // fix2: 每季顯示一個 X 軸標籤（每 3 個月取一次）
       const rlBarOptions = {
         ...commonOptions,
         scales: {
@@ -566,7 +678,6 @@
         type: "bar",
         data: {
           labels: rlByMonth.labels,
-          // fix1: 用 RL_DEFS 順序，filter 掉全為 0 的類別
           datasets: RL_DEFS
             .filter((d) => rlCounts[d.key] > 0)
             .map((d) => ({
