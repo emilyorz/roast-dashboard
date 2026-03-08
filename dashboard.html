@@ -206,6 +206,14 @@
         </section>
 
         <section class="panel span-12">
+          <h3>烘焙度分布</h3>
+          <div style="display:flex;gap:12px;height:290px;">
+            <div style="flex:1;min-width:0;"><canvas id="roastLevelDonut"></canvas></div>
+            <div style="flex:2;min-width:0;"><canvas id="roastLevelBar"></canvas></div>
+          </div>
+        </section>
+
+        <section class="panel span-12">
           <h3>操作行為</h3>
           <div class="chart-box"><canvas id="actionChart"></canvas></div>
           <div class="action-meta" id="actionMeta"></div>
@@ -342,6 +350,67 @@
         `<div>P 平均觸發時間: ${avgPct.P ?? "-"}%</div>` +
         `<div>D 平均觸發時間: ${avgPct.D ?? "-"}%</div>` +
         `<div>未記錄豆量: ${data.weightHistogram.missingCount} 筆</div>`;
+
+      const roastLevelColors = {
+        Light: "#f5d87a",
+        Medium: "#d08f46",
+        MediumDark: "#9b5e2a",
+        Dark: "#4a2010",
+        Unknown: "#555",
+      };
+      const roastLevelLabels = {
+        Light: "淺烘 Light",
+        Medium: "中烘 Medium",
+        MediumDark: "中深烘 Medium-Dark",
+        Dark: "深烘 Dark",
+        Unknown: "未知",
+      };
+      const rlLevels = ["Light", "Medium", "MediumDark", "Dark", "Unknown"];
+      const rlCounts = data.roastLevel.counts;
+
+      new Chart(document.getElementById("roastLevelDonut"), {
+        type: "doughnut",
+        data: {
+          labels: rlLevels.map((l) => roastLevelLabels[l]),
+          datasets: [
+            {
+              data: rlLevels.map((l) => rlCounts[l]),
+              backgroundColor: rlLevels.map((l) => roastLevelColors[l]),
+              borderColor: "#191d22",
+              borderWidth: 2,
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { labels: { color: "#d4d8de", font: { size: 11 } } },
+          },
+        },
+      });
+
+      const rlByMonth = data.roastLevel.roastLevelByMonth;
+      new Chart(document.getElementById("roastLevelBar"), {
+        type: "bar",
+        data: {
+          labels: rlByMonth.labels,
+          datasets: rlLevels.map((l) => ({
+            label: roastLevelLabels[l],
+            data: rlByMonth[l],
+            backgroundColor: roastLevelColors[l],
+            stack: "roastLevel",
+          })),
+        },
+        options: {
+          ...commonOptions,
+          scales: {
+            ...commonOptions.scales,
+            x: { ...commonOptions.scales.x, stacked: true },
+            y: { ...commonOptions.scales.y, stacked: true },
+          },
+        },
+      });
 
       const sequence = data.actionBehavior.averageSequence
         .map((s) => {

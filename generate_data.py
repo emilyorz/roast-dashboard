@@ -105,6 +105,21 @@ def load_roasts():
     return roasts
 
 
+ROAST_LEVELS = ["Light", "Medium", "MediumDark", "Dark", "Unknown"]
+
+
+def classify_roast_level(drop_temp):
+    if drop_temp is None:
+        return "Unknown"
+    if drop_temp < 185:
+        return "Light"
+    if drop_temp < 200:
+        return "Medium"
+    if drop_temp < 210:
+        return "MediumDark"
+    return "Dark"
+
+
 def build_data(roasts):
     now = datetime.now()
     week_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -116,6 +131,8 @@ def build_data(roasts):
     drop_temps = []
     weights = []
     monthly_counts = Counter()
+    roast_level_counts = Counter()
+    roast_level_by_month = defaultdict(lambda: Counter())
 
     action_counts = Counter({"F": 0, "P": 0, "D": 0})
     action_percentages = defaultdict(list)
@@ -138,6 +155,11 @@ def build_data(roasts):
         drop = to_float(record.get("beanDropTemperature"))
         if drop is not None:
             drop_temps.append(drop)
+
+        level = classify_roast_level(drop)
+        roast_level_counts[level] += 1
+        if dt:
+            roast_level_by_month[dt.strftime("%Y-%m")][level] += 1
 
         weight = to_float(record.get("weightGreen"))
         if weight and weight > 0:
@@ -260,6 +282,16 @@ def build_data(roasts):
             "missingCount": len(roasts) - len(weights),
             "binSize": 50,
             "unit": "g",
+        },
+        "roastLevel": {
+            "counts": {level: roast_level_counts.get(level, 0) for level in ROAST_LEVELS},
+            "roastLevelByMonth": {
+                "labels": monthly_labels,
+                **{
+                    level: [roast_level_by_month[m].get(level, 0) for m in monthly_labels]
+                    for level in ROAST_LEVELS
+                },
+            },
         },
         "actionBehavior": {
             "countByType": {
