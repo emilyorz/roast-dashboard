@@ -305,3 +305,165 @@ No localhost ports open — all device communication is in-process.
 | Firebase Project | `testaillio` (firebaseapp.com) |
 | Firmware release log | `https://roaster-firmware.s3.ap-northeast-1.amazonaws.com/FirmwareReleaseLog.txt` |
 | Release notes | `https://raw.githubusercontent.com/roastworld/roast-time/master/release-notes.json` |
+
+---
+
+## 7. USB Protocol (v2.x — Complete)
+
+> Source: reverse-engineered from `.webpack/renderer/bg_window/index.js` inside `RoasTime.app/Contents/Resources/app.asar`
+
+### Device Identifiers
+
+```javascript
+AILLIO_VENDOR_IDS  = [0x0483]          // STMicroelectronics
+AILLIO_PRODUCT_IDS = [0x5741, 0xa27e]  // Old firmware / Current firmware
+```
+
+### Packet Format
+
+All USB packets are **64 bytes**, transferred via HID/USB bulk.
+
+**Command → Device:** `Buffer.alloc(64)` — first bytes are command-specific (see below).
+
+**Device → App:** 64-byte response. Validity check:
+```javascript
+data[62] == 0xFF && data[63] == 0xAA && data[41] == 0x0A
+```
+
+---
+
+### Command Reference (Write to Device)
+
+| Command ID | Name | Bytes | Description |
+|-----------|------|-------|-------------|
+| 0 | SET_DRUM_SPEED | `[0x32, 0x00, setting, 0x00]` | Set drum speed (0–9) |
+| 1 | PSR_BUTTON_COMMAND | `[0x30, 0x01, 0x00, 0x00]` | Physical button press |
+| 2 | SET_FAN_SPEED | `[0x31, fanId, setting, 0x00]` | Fan 1: fanId=0x00, Fan 2: fanId=0x03 |
+| 3 | SET_INDUCTION_POWER | `[0x34, 0x00, setting, 0xBA]` | Set power level (0–9) |
+| 7 | SET_BUZZER | `[0x38, 0x00, setting>>8, setting]` | Buzzer control |
+| 9 | SET_PREHEAT_SETPOINT | `[0x35, 0x00, setting>>8, setting]` | Preheat target temp (°C) |
+| 10 | POWER_INCREMENT | `[0x34, 0x01, 0xAA, 0xAA]` | Power +1 step |
+| 11 | POWER_DECREMENT | `[0x34, 0x02, 0xAA, 0xAA]` | Power −1 step |
+| 12 | SET_BLOWER_SETTING | `[0x31, 0x00, setting, 0x00]` | Blower direct set |
+| 13 | BLOWER_INCREMENT | `[0x31, 0x01, 0xAA, 0xAA]` | Blower +1 step |
+| 14 | BLOWER_DECREMENT | `[0x31, 0x02, 0xAA, 0xAA]` | Blower −1 step |
+| 19 | GET_DEVICE_DATA | `[0x89, 0x01, ...]` read 32 bytes | Device info (serial, hardware, firmware) |
+| 20 | GET_DEVICE_USAGE | `[0x89, 0x01, ...]` read 36 bytes | Lifetime usage stats |
+| 21 | PAYLOAD_PART_A | `[0x30, 0x01]` read 64 bytes | Real-time sensor data Part A |
+| 22 | PAYLOAD_PART_B | `[0x30, 0x03]` read 64 bytes | Real-time sensor data Part B |
+| 23 | CLEAR_BUFFER | `[0x30, 0x05]` | Clear device FIFO buffer |
+| 24 | RESET_USB | `[0x4A, 0x01]` | Reset USB connection |
+| 25 | RESET_ROASTER | `[0x20, 0xFF]` | Full roaster reset |
+| 26 | GET_ROASTER_STATUS | `[0x30, 0x99]` | Get roaster status (same as GET_VARS in v4) |
+
+**Note:** SET_DRUM_SPEED byte 0 deduced as `0x32` from pattern; exact value should be verified.
+
+---
+
+### PAYLOAD_PART_A — 64-byte Response Layout
+
+Called every sample (2 Hz). Contains all real-time sensor readings.
+
+| Bytes | Field | Type | Unit | Description |
+|-------|-------|------|------|-------------|
+| 0–3 | `beanTemp` | float32 LE | °C | Bean temperature (IBTS) |
+| 4–7 | `beanRise` | float32 LE | °C/min | Bean RoR |
+| 8–11 | `drumTemp` | float32 LE | °C | Drum temperature |
+| 12–15 | `ibtsRise` | float32 LE | °C/min | IBTS RoR |
+| 16–19 | `exitTemp` | float32 LE | °C | Exhaust temperature |
+| 20–23 | `buttons` | uint32 LE | — | Button state bitmask |
+| 24 | `minutes` | uint8 | min | Elapsed time (minutes) |
+| 25 | `seconds` | uint8 | sec | Elapsed time (seconds) |
+| 26 | `blowerSetting` | uint8 | 0–9 | Current fan/blower level |
+| 27 | `inductionPowerSetting` | uint8 | 0–9 | Current power level |
+| 28 | `drumSetting` | uint8 | 0–9 | Current drum speed |
+| 29 | `stateMachine` | uint8 | enum | Roaster state (see below) |
+| 30–31 | `sampleNumber` | uint16 LE | count | Sample sequence number |
+| 32–35 | `ambientTemp` | float32 LE | °C | Ambient temperature |
+| 36–39 | `ambientIRTemp` | float32 LE | °C | Ambient IR temperature |
+| 41 | *(validity byte)* | uint8 | — | Must be `0x0A` for valid data |
+| 42–43 | `samplesInFIFO` | uint16 LE | count | Samples waiting in buffer |
+| 44–45 | `blowerRPM` | uint16 LE | RPM | Blower motor RPM |
+| 48–49 | `inputVoltage` | uint16 LE | — | Input voltage reading |
+| 52–53 | `coilRPM` | uint16 LE | RPM | Induction coil RPM |
+| 54–55 | `errorCodes` | uint16 LE | — | Error code bitmask |
+| 60 | `crc` | uint8 | — | CRC byte |
+| 62 | *(validity byte)* | uint8 | — | Must be `0xFF` |
+| 63 | *(validity byte)* | uint8 | — | Must be `0xAA` |
+
+---
+
+### PAYLOAD_PART_B — 64-byte Response Layout
+
+| Bytes | Field | Type | Unit | Description |
+|-------|-------|------|------|-------------|
+| 0–3 | `beanSoundEnergy` | float32 LE | — | Bean crack sound energy |
+| 4–7 | `beanSoundBaseline` | float32 LE | — | Sound baseline |
+| 8–11 | `rorPreheat` | float32 LE | °C/min | RoR during preheat |
+| 24–25 | `errorCode1` | uint16 LE | — | Error code 1 |
+| 26–27 | `errorValue1` | uint16 LE | — | Error value 1 |
+| 28–29 | `errorCode2` | uint16 LE | — | Error code 2 |
+| 30–31 | `errorValue2` | uint16 LE | — | Error value 2 |
+| 32–33 | `coilRPMFan2` | uint16 LE | RPM | Coil RPM Fan 2 |
+| 34–35 | `currentTest` | uint16 LE | — | Self-test current |
+| 36 | `IGBTTemperature` | uint8 | °C | IGBT 1 temperature |
+| 37 | `IGBT2Temperature` | uint8 | °C | IGBT 2 temperature |
+| 38–39 | `timerPeriod` | uint16 LE | — | IGBTFrequency = 40000000 / timerPeriod |
+| 40–41 | `pHTemperatureSetting` | uint16 LE | — | pH temp setting |
+| 42–43 | `IRFanRPM` | uint16 LE | RPM | IR sensor fan RPM |
+
+---
+
+### GET_DEVICE_DATA — 32-byte Response
+
+| Bytes | Field | Description |
+|-------|-------|-------------|
+| 0–3 | `serialNumber` | uint32 LE |
+| 4 | `yearManufacturing` | uint8 |
+| 5 | `monthManufacturing` | uint8 |
+| 6 | `dayManufacturing` | uint8 |
+| 7 | `hourManufacturing` | uint8 |
+| 8–11 | `hardwareVersion` | uint32 LE |
+| 10 | `IRSensor` | uint8 (within hardwareVersion) |
+| 12–15 | `uniqueID1` | uint32 LE, hex string |
+| 16–19 | `uniqueID2` | uint32 LE, hex string |
+| 20–23 | `uniqueID3` | uint32 LE, hex string |
+| 24–27 | `firmwareVersion` | uint32 LE |
+| 28–31 | `crc` | uint32 LE |
+
+---
+
+### stateMachine Values (Roaster State)
+
+| Value | State | Description |
+|-------|-------|-------------|
+| `0x0000` | IDLE | Roaster idle / off |
+| `0x0002` | PREHEATING (start) | Preheat initiated |
+| `0x0003` | PREHEATING | Preheating in progress |
+| `0x0004` | CHARGE | Bean charge detected |
+| `0x0005` | — | Valid roasting state |
+| `0x0006` | ROASTING | Active roast |
+| `0x0007` | — | Valid roasting state |
+| `0x0008` | COOLING | Cooling cycle |
+| `0x0009` | COOLDOWN | Cooldown complete |
+| `0x0023` | PREHEATING | Preheating (alt state) |
+| `0x0024` | — | Valid roasting state |
+
+`VALID_ROASTER_STATES = [0x0002, 0x0003, 0x0004, 0x0005, 0x0006, 0x0007, 0x0008, 0x0009, 0x0023, 0x0024]`
+
+`PREHEATING_ROASTER_STATES = [0x0023, 0x0002, 0x0003]`
+
+---
+
+### IPC Events (bg_window → main_window)
+
+| Event | Type | Payload |
+|-------|------|---------|
+| `state` | MSG_TYPE.State | Roaster state update |
+| `data` | MSG_TYPE.RoastData | Full blueprint object (Part A + B merged) |
+| `new-roast-from-device` | MSG_TYPE.RoastStartedByDevice | Roast auto-started by physical button |
+| `crack-from-device` | MSG_TYPE.CrackButtonPressedByDevice | Crack button pressed on device |
+| `detach-from-device` | MSG_TYPE.UsbDetached | USB disconnected |
+| `error` | MSG_TYPE.Error | Error event |
+
+Transport: `node-ipc` Unix socket (socket name passed via `set-socket` IPC message).
