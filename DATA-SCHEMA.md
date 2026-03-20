@@ -252,3 +252,56 @@ https://roaster-firmware.s3-ap-northeast-1.amazonaws.com/MainProgram{version}.bi
 `https://github.com/roastworld` — Aillio's org.
 Repos `roastime-backend` and `roastime-comms` are **private**.
 Only `roastime-release` is public (update manifest only).
+
+---
+
+## 6. Legacy Architecture (RoasTime v2.x — currently in use)
+
+> The version actively used for roasting is the **older v2.5.5-alpha** (`/Applications/RoasTime.app`, 2022).
+> It uses a completely different architecture from v4.x described above.
+
+### Key Difference
+
+| | v4.x (RoasTime 2.app) | v2.x (RoasTime.app) |
+|--|----------------------|----------------------|
+| Backend | Separate `roastime-backend-mac-x64` process | Embedded in Electron main via webpack |
+| Comms | Separate `roastime-comms-mac-x64` (Go) | Native node addon (`node.napi.node`) |
+| IPC | WebSocket (`ws://localhost:{port}`) | Electron IPC: `window.webContents.send("usb", data)` |
+| Size | 98MB asar | 48MB asar |
+
+### USB IPC (v2.x)
+
+USB data is read in the main process and pushed directly to renderer:
+```javascript
+window.webContents.send("usb", data)  // main → renderer
+```
+
+No localhost ports open — all device communication is in-process.
+
+### Firebase Collections (v2.x config)
+
+| Key | Firestore Collection |
+|-----|---------------------|
+| configs | `configs` |
+| roasts | `roast_tmp` |
+| syncs | `syncs` |
+| recipes | `recipes` |
+| userBeans | `user_beans` |
+| beans | `beans` |
+| downloads | `roast_downloads` |
+| registers | `roaster_register` |
+| notifications | `notifications` |
+| recipeDownloads | `recipe_downloads` |
+| containerGroups | `containerGroups` |
+| containers | `containers` |
+
+### API Endpoints (v2.x)
+
+| Name | URL |
+|------|-----|
+| Identity API | `https://id.aillio.com` |
+| RoastWorld API | `https://api.roast.world` |
+| RT API (legacy) | `http://209.97.168.64/` |
+| Firebase Project | `testaillio` (firebaseapp.com) |
+| Firmware release log | `https://roaster-firmware.s3.ap-northeast-1.amazonaws.com/FirmwareReleaseLog.txt` |
+| Release notes | `https://raw.githubusercontent.com/roastworld/roast-time/master/release-notes.json` |
