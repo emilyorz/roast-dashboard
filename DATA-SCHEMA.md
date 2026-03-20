@@ -336,11 +336,45 @@ Before parsing Payload A, validate:
 data[62] == 0xFF && data[63] == 0xAA && data[41] == 0x0A
 ```
 
+### USB Session Lifecycle
+
+```
+1. CONNECT
+   usb.findByIds(0x0483, 0x5741) || usb.findByIds(0x0483, 0xA27E)
+   device.open()
+   device.interfaces[1].detachKernelDriver()  // non-Windows only
+   device.interfaces[1].claim()
+   deviceInEndpoint  = find endpoint direction=="in"
+   deviceOutEndpoint = find endpoint direction=="out"
+   deviceInEndpoint.timeout = 5000
+
+2. INITIALIZE (first poll cycle only, when serialNumber == 0)
+   clearBuffer()          → CLEAR_BUFFER [0x30, 0x05]
+   getDeviceData()        → GET_DEVICE_DATA [0x30, 0x02], read 32 bytes → parse serial/hardware/firmware
+   getDeviceUsage()       → GET_DEVICE_USAGE [0x89, 0x01], read 36 bytes → parse usage stats
+   if firmwareVersion > 999: retry (invalid response)
+
+3. STEADY-STATE POLL (every 350ms)
+   blueprint = Parser.blueprint()     // empty default object
+   send PAYLOAD_PART_A [0x30, 0x01]  // NOT [0x30, 0x99]
+   read 64 bytes → validate → setLogPayloadA()
+   send PAYLOAD_PART_B [0x30, 0x03]
+   read 64 bytes → setLogPayloadB()
+   if blueprint.validData: push MSG_TYPE.RoastData via IPC
+
+4. DISCONNECT
+   deviceInterface.release()
+   connectedDevice.close()
+```
+
+> **重要**：實際輪詢 Payload A 用的是 `PAYLOAD_PART_A [0x30, 0x01]`，不是 `GET_ROASTER_STATUS [0x30, 0x99]`。
+> `GET_ROASTER_STATUS` 只在 firmware update bootloader 流程中使用。
+
 ### Poll Loop
 
 Runs every **350ms**. Each cycle:
-1. Send `GET_ROASTER_STATUS` → receive **Payload A** (64 bytes)
-2. Send `PAYLOAD_PART_B` → receive **Payload B** (64 bytes)
+1. Send `PAYLOAD_PART_A [0x30, 0x01]` → receive **Payload A** (64 bytes)
+2. Send `PAYLOAD_PART_B [0x30, 0x03]` → receive **Payload B** (64 bytes)
 
 ---
 
@@ -402,8 +436,8 @@ Runs every **350ms**. Each cycle:
 | 26 | 1 | uint8 | `blowerSetting` | Current fan setting (0–9) |
 | 27 | 1 | uint8 | `inductionPowerSetting` | Current power setting (0–9) |
 | 28 | 1 | uint8 | `drumSetting` | Current drum speed (0–9) |
-| 29 | 1 | uint8 | `stateMachine` | Roaster state (see state table below) |
-| 30 | 2 | uint16 LE | `sampleNumber` | Sequential sample counter |
+| 29 | 1 | uint8 | `stateMachine` | Roaster state — **confirmed 1 byte** (`blueprint.stateMachine = data[29]`) |
+| 30 | 2 | uint16 LE | `sampleNumber` | Sequential sample counter (`data[30] \| (data[31] << 8)`) |
 | 32 | 4 | float32 LE | `ambientTemp` | Ambient temperature °C |
 | 36 | 4 | float32 LE | `ambientIRTemp` | Ambient IR temperature °C |
 | 41 | 1 | uint8 | *(valid flag)* | Must be `0x0A` for valid data |
@@ -412,9 +446,19 @@ Runs every **350ms**. Each cycle:
 | 48 | 2 | uint16 LE | `inputVoltage` | Input voltage |
 | 52 | 2 | uint16 LE | `coilRPM` | Induction coil RPM |
 | 54 | 2 | uint16 LE | `errorCodes` | Error code flags |
-| 60 | 1 | uint8 | `crc` | CRC byte |
+| 60 | 1 | uint8 | `crc` | CRC byte (algorithm unspecified, not validated in source) |
+| 61 | 1 | — | *(reserved/unused)* | Not read by parser |
 | 62 | 1 | uint8 | *(valid flag)* | Must be `0xFF` |
 | 63 | 1 | uint8 | *(valid flag)* | Must be `0xAA` |
+
+**Known gaps in Payload A** (bytes not referenced in parser):
+- byte 40: unknown / reserved
+- bytes 46–47: unknown / reserved
+- bytes 50–51: unknown / reserved
+- bytes 56–59: unknown / reserved
+- byte 61: unknown / reserved
+
+These may contain additional sensor data in newer firmware versions or be padding. Recommend capturing a real hex dump to confirm.
 
 ---
 
@@ -487,6 +531,25 @@ Runs every **350ms**. Each cycle:
 
 ---
 
+### IPC Handler Commands (Renderer → bg_window)
+
+The renderer sends requests to bg_window via node-ipc. Supported handler names:
+
+| Handler name | Payload | Action |
+|-------------|---------|--------|
+| `prs` | — | Simulate PSR button press |
+| `preheat` | `{ settingType, settingValue }` | Set preheat setpoint (settingType="preheat") |
+| `setting` | `{ settingType, settingValue }` | Direct set: "power"/"fan"/"drum"-setting |
+| `setting-up` | `{ settingType, settingValue }` | Increment: "power"/"fan"/"drum"-up |
+| `setting-down` | `{ settingType, settingValue }` | Decrement: "power"/"fan"/"drum"-down |
+| `roast-meta` | `{ userId, roastId, ... }` | Set logger metadata for active roast |
+| `state` | — | Query current device state (returns state object) |
+
+### Error Handling
+
+Error codes are numeric (uint16). Values 1–10 trigger `hasError = true` in the roast record.
+No enum/map of error code meanings found in source — error codes are stored raw.
+
 ### IPC Transport (bg_window ↔ renderer)
 
 bg_window uses `node-ipc` Unix socket server. Messages are JSON:
@@ -515,6 +578,178 @@ bg_window uses `node-ipc` Unix socket server. Messages are JSON:
 | `error` | `{ errorCode1, errorCode2, errorValue1, errorValue2 }` | Device error |
 | `log-send-started` | — | Log upload begin |
 | `log-send-ended` | — | Log upload complete |
+
+---
+
+## 8. TypeScript Interfaces
+
+### Roast Record (roasts/ JSON file)
+
+```typescript
+interface RoastRecord {
+  // Identity
+  uid: string;                    // nanoid, used as filename
+  userId: string;                 // Firebase UID
+  recipeID?: string;              // references recipes/ dir
+
+  // Timestamps
+  dateTime: number;               // Unix ms
+  updatedAt?: number;             // Unix ms (29% present)
+
+  // Timing
+  totalRoastTime: number;         // seconds
+  roastStartIndex: number;        // index into time-series arrays
+  roastEndIndex: number;          // index into time-series arrays
+  sampleRate: number;             // always 2 (Hz)
+  missingSeconds: number[];       // indexes with missing data (usually [])
+
+  // Temperatures (scalar, °C)
+  preheatTemperature: number;
+  beanChargeTemperature: number;  // IBTS bean temp at charge
+  beanDropTemperature: number;    // IBTS bean temp at drop
+  drumChargeTemperature: number;
+  drumDropTemperature: number;
+  rorPreheat?: number;            // °C/min (94% present)
+
+  // Time-series (length = totalRoastTime * sampleRate)
+  beanTemperature: number[];      // °C, IBTS
+  drumTemperature: number[];      // °C
+  beanDerivative: number[];       // °C/min, RoR
+  ibtsDerivative: number[];       // °C/min, IBTS RoR (different smoothing)
+  exitTemperature: number[];      // °C, exhaust
+
+  // Milestone indexes (in time-series units; 0 = not marked)
+  indexYellowingStart: number;
+  indexFirstCrackStart: number;
+  indexFirstCrackEnd: number;
+  indexSecondCrackStart: number;
+  indexSecondCrackEnd: number;
+
+  // Weight (g; 0 = not filled by user)
+  weightGreen: number;
+  weightRoasted: number;
+
+  // Machine info
+  roastNumber: number;            // lifetime roast counter on machine
+  serialNumber: number;
+  firmware: number;
+  firmwareVersion: number;        // same as firmware
+  softwareVersion: string;        // e.g. "3.4.1"
+  hardware: number;
+  IRSensor: number;               // 2 = IBTS
+
+  // User-filled (optional)
+  roastName?: string;
+  roastDegree?: string;
+  ambient?: number;               // °C
+  humidity?: number;              // %
+  inventory?: string;
+  hasError?: boolean;
+  rating?: number;                // never used in observed data
+  comments?: string;              // never used in observed data
+
+  // Manual actions log
+  actions: {
+    actionTimeList: Array<{
+      ctrlType: 0 | 1 | 2;       // 0=Power, 1=Fan, 2=Drum
+      index: number;              // seconds from roast start
+      value: number;              // 0–9
+    }>;
+    actionTempList: never[];      // always empty
+  };
+}
+```
+
+### Recipe
+
+```typescript
+interface Recipe {
+  uid: string;
+  name: string;
+  userId: string;
+  dateTime: number;               // Unix ms
+  updatedAt?: number;
+  tempMeasurement: "C" | "F";
+  preheatTemp: number;            // °C
+  isFork: boolean;
+
+  startSettings: {
+    power: string;                // "0"–"9"
+    drum: string;
+    fan: string;
+  };
+
+  events: Array<Array<{
+    trigger: 0 | 3;               // 0=temp threshold, 3=elapsed time
+    condition: number;
+    value: number | null;         // °C or seconds
+    actions: Array<{
+      action: 0 | 1 | 2;         // 0=Power, 1=Fan, 2=Drum
+      value: string;              // "0"–"9"
+    }>;
+  }>>;
+}
+```
+
+### Real-time Blueprint (IPC data event payload)
+
+```typescript
+interface Blueprint {
+  // Payload A fields
+  beanTemp: number;               // °C float, IBTS
+  beanRise: number;               // °C/min float, RoR
+  drumTemp: number;               // °C float
+  ibtsRise: number;               // °C/min float
+  exitTemp: number;               // °C float
+  buttons: number;                // bitmask; bit31=crack button
+  minutes: number;                // elapsed time
+  seconds: number;
+  blowerSetting: number;          // 0–9, current fan level
+  inductionPowerSetting: number;  // 0–9, current power level
+  drumSetting: number;            // 0–9, current drum speed
+  stateMachine: number;           // 0x0000–0x0024, see state table
+  sampleNumber: number;           // sequential counter
+  ambientTemp: number;            // °C float
+  ambientIRTemp: number;          // °C float
+  roomHumidity: number;           // % (from ambient profile, not USB)
+  samplesInFIFO: number;
+  blowerRPM: number;
+  inputVoltage: number;
+  coilRPM: number;
+  errorCodes: number;
+  validData: boolean;
+
+  // Payload B fields
+  beanSoundEnergy: number;        // acoustic crack energy
+  beanSoundBaseline: number;
+  rorPreheat: number;             // °C/min
+  errorCode1: number;             // 1–10 = hasError
+  errorValue1: number;
+  errorCode2: number;
+  errorValue2: number;
+  coilRPMFan2: number;
+  currentTest: number;
+  IGBTTemperature: number;        // °C
+  IGBT2Temperature: number;       // °C
+  IGBTFrequency: number;          // Hz = 40000000 / timerPeriod
+  pHTemperatureSetting: number;
+  IRFanRPM: number;
+}
+```
+
+### GET_DEVICE_USAGE — 36-byte Response
+
+```typescript
+interface DeviceUsage {
+  totalSecondsOn: number;         // bytes 0–3, uint32 LE
+  totalSecondsDrumMotorOn: number;// bytes 4–7, uint32 LE
+  powerOnCounter: number;         // bytes 8–11, uint32 LE
+  states: [number, number, number, number]; // bytes 12–27, 4× uint32 LE
+  eepromMainFailure: number;      // bytes 28–29, uint16 LE
+  numberRoasts: number;           // bytes 30–31, uint16 LE
+  // bytes 32–35: unspecified
+}
+```
 
 ---
 
