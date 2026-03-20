@@ -151,19 +151,104 @@ Each array has one value per 0.5 seconds. Length = `totalRoastTime × sampleRate
 ├── indexes/         # LokiJS index (index.db, ASCII JSON)
 ├── configs/         # App config (OFFLINE = local, or user-id)
 ├── users/           # Firebase anonymous auth token
-├── device/          # Connected roaster metadata
+├── device/          # Connected roaster metadata (nanoid-based device ID)
 ├── sync/            # Firebase sync state
 └── logs/            # App logs
 ```
 
-**Backend stack:**
-- App: Electron (98MB app.asar)
-- Backend: Node.js (`roastime-backend-mac-x64`)
-- Device comms: Go binary (`roastime-comms-mac-x64`) — libusb/zerousb via USB
-- Auth: Firebase Anonymous (`testaillio` project)
-- Firmware CDN: `s3-ap-northeast-1.amazonaws.com` (Aillio's bucket)
+---
 
-**USB communication:**
-- Go binary talks to Bullet R1 over USB using bulk transfers
-- Commands include: `GetDeviceMeta`, `GetVars`, `SetVars`, firmware flash pages
-- Firmware URL pattern: `bulletR1{version}.json` / `MainProgram{version}.bin`
+## 5. Application Architecture (Electron Layer)
+
+> Reverse-engineered from `app.asar` (RoasTime v4.6.16, main=`dist/index.js`)
+
+### Process Topology
+
+```
+Electron main process (dist/index.js)
+│
+├── spawns → roastime-backend-mac-x64 --port {randomPort}
+│               ↕ WebSocket: ws://localhost:{backendPort}
+│
+└── spawns → roastime-comms-mac-x64 --port {randomPort}
+                ↕ WebSocket: ws://localhost:{commsPort}/usb
+```
+
+Both backend and comms ports are **dynamically assigned** via `get-port-please`.
+
+### How Frontend Gets Ports
+
+```javascript
+// Electron main exposes via IPC:
+ipcMain.handle('get-ports', () => {
+    frontend.webContents.send('websocket-ports', {
+        backend: `ws://localhost:${backendPort}`,
+        comms:   `ws://localhost:${commsPort}/usb`
+    })
+})
+
+// Frontend (renderer) calls:
+window.electronAPI.getPorts((event, { backend, comms }) => {
+    // connect to both WebSocket endpoints
+})
+```
+
+### IPC Channels (Electron main ↔ renderer)
+
+| Channel | Direction | Description |
+|---------|-----------|-------------|
+| `get-ports` | renderer → main (invoke) | Request backend + comms port |
+| `websocket-ports` | main → renderer (send) | Returns `{ backend, comms }` URLs |
+| `update-versions` | renderer → main (invoke) | Report frontend version info |
+| `download-logs` | renderer → main (invoke) | Trigger log download |
+| `force-install-dependencies` | renderer → main (invoke) | Force re-install deps |
+| `update-log-config` | renderer → main (invoke) | Update logging config |
+| `on-roast-world-close` | main → renderer (send) | RoastWorld window closed |
+| `on-new-versions` | main → renderer (send) | New version available |
+| `on-update-start` | main → renderer (send) | Update download started |
+| `on-update-finish` | main → renderer (send) | Update complete |
+
+### WebSocket Endpoints
+
+| Endpoint | Purpose |
+|----------|---------|
+| `ws://localhost:{backendPort}` | Data store, Firebase sync, recipe management, roast history |
+| `ws://localhost:{commsPort}/usb` | Real-time device: temperature stream, P/F/D control, device state |
+
+> **Note:** WebSocket message schemas are defined in the frontend SPA (separate repo, not in app.asar).
+> To discover full message formats: intercept localhost WS traffic with Charles/Proxyman while running RoasTime.
+
+### External API
+
+```
+Base URL: https://api.roast.world/api/v3
+
+Endpoints used by Electron main:
+  GET /identity/updates/roastime-{frontend|backend|comms}/{platform}/{userId}
+  GET /updates/roastime-{frontend|backend|comms}/{platform}/{cohort}
+  GET /bins/download/roastime-{frontend|backend|comms}/{platform}/{version}
+```
+
+### USB Device Identifiers
+
+From Windows driver installer (`wdi-simple.exe`):
+
+| Model | VID | PID |
+|-------|-----|-----|
+| Bullet R1 (current) | `0x0483` | `0xA27E` |
+| Bullet R1 (old firmware) | `0x0483` | `0x5741` |
+
+Vendor `0x0483` = STMicroelectronics (STM32 USB HID).
+
+### Firmware URLs
+
+```
+https://roaster-firmware.s3-ap-northeast-1.amazonaws.com/bulletR1{version}.json?timestamp={ts}
+https://roaster-firmware.s3-ap-northeast-1.amazonaws.com/MainProgram{version}.bin?timestamp={ts}
+```
+
+### GitHub Org
+
+`https://github.com/roastworld` — Aillio's org.
+Repos `roastime-backend` and `roastime-comms` are **private**.
+Only `roastime-release` is public (update manifest only).
