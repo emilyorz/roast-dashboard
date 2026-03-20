@@ -1,7 +1,7 @@
 # Bullet R1 Data Schema & Control Reference
 
-> Reverse-engineered from RoasTime 2 (v3.4.1) local data store.
-> Based on analysis of 2,196 roast records + 24 recipes.
+> Reverse-engineered from RoasTime v2.5.5-alpha (v2.x) and RoasTime 2 v4.6.16 (v4.x).
+> Sources: 2,196 roast records, 24 recipes, bg_window JS (v2.x), @aillio/aillio-common TypeScript source (v4.x).
 > Last updated: 2026-03-20
 
 ---
@@ -46,6 +46,34 @@ Initial P/F/D values when a roast begins:
 ---
 
 ### Recipe Automation (Events)
+
+From `@aillio/aillio-common` TypeScript source (`lib/models/Recipe.ts`):
+
+**Trigger enum:**
+| Value | Name | Description |
+|-------|------|-------------|
+| 0 | IRBeanTemperature | IBTS bean temp threshold |
+| 1 | ProbeBeanTemperature | Probe bean temp threshold |
+| 2 | ROR | Rate of rise threshold |
+| 3 | Time | Elapsed time |
+| 4 | MilestoneYellowing | Yellowing milestone reached |
+| 5 | MilestoneFirstCrack | First crack milestone |
+| 6 | MilestoneSecondCrack | Second crack milestone |
+
+**Condition enum:**
+| Value | Name |
+|-------|------|
+| 0 | GreaterThanEqual |
+| 1 | LessThanEqual |
+
+**Action enum:**
+| Value | Name |
+|-------|------|
+| 0 | ChangePowerSetting |
+| 1 | ChangeDrumSetting |
+| 2 | ChangeFanSetting |
+| 3 | Popup |
+| 4 | EndRoast |
 
 Recipes define automated control changes triggered by conditions:
 
@@ -215,8 +243,86 @@ window.electronAPI.getPorts((event, { backend, comms }) => {
 | `ws://localhost:{backendPort}` | Data store, Firebase sync, recipe management, roast history |
 | `ws://localhost:{commsPort}/usb` | Real-time device: temperature stream, P/F/D control, device state |
 
-> **Note:** WebSocket message schemas are defined in the frontend SPA (separate repo, not in app.asar).
-> To discover full message formats: intercept localhost WS traffic with Charles/Proxyman while running RoasTime.
+### v4.x WebSocket Message Format
+
+From `@aillio/aillio-common` TypeScript source.
+
+**Backend WebSocket — JSON envelopes:**
+
+```typescript
+// Renderer → Backend (request)
+interface IncomingRouteContract<T = unknown> {
+  id: string;          // nanoid request ID
+  requestId?: string;
+  route: Route;        // enum value (see Routes below)
+  body: T;
+}
+
+// Backend → Renderer (response)
+interface OutgoingRouteContract<T = unknown> {
+  id: string;
+  requestId?: string;
+  status: RouteStatus; // 0=Failure, 1=Success
+  body: T;
+}
+```
+
+**Backend Route enum (complete):**
+```
+Alive, SetUser, Heartbeat, Find, Create, Update, Delete,
+AddCompleteContainerToInventory, Login, Logout, Search, GetUser,
+Sync, ResetPassword, ChangePassword, Register, LoginWithFacebook,
+LoginWithGoogle, LoginToRoastWorld, Version, GetNotifications,
+GetValidToken, UploadLog, LoginAsGuest, CountGuestRecords,
+MigrateGuestRecords, ReadNotifications, GetDeviceCanRegister,
+RegisterDevice, UnregisterDevice, GetDevices, VerifyPassword
+```
+
+**Comms WebSocket (`/usb`) — message format:**
+
+```typescript
+// Renderer → Comms (command)
+interface CommsOutgoingRouteContract<T = unknown> {
+  id?: string;
+  requestId?: string;
+  route: CommsRoute;   // enum value (see below)
+  body: T;
+}
+
+enum CommsRoute {
+  Connect = 0,
+  Send = 1,
+  Read = 2,
+  Template = 3,
+  StartLogging = 4,
+  Version = 5,
+}
+
+enum CommsJob {
+  UpdateFirmware = 0,
+  Poll = 1,
+}
+
+// Comms push events (subscription topics)
+enum SubscriptionTopic {
+  PollDataAvailable = "POLL_DATA_AVAILABLE",
+  FirmwareDataAvailable = "FIRMWARE_DATA_UPDATE",
+}
+```
+
+**IPC Socket (v2.x) — MSG_TYPE enum (from Socket.ts):**
+```typescript
+enum MSG_TYPE {
+  State = "state",
+  RoastData = "data",
+  RoastStartedByDevice = "new-roast-from-device",
+  CrackButtonPressedByDevice = "crack-from-device",
+  UsbDetached = "detach-from-device",
+  Error = "error",
+  LogSendStarted = "log-send-started",
+  LogSendEnded = "log-send-ended",
+}
+```
 
 ### External API
 
@@ -403,6 +509,40 @@ Runs every **350ms**. Each cycle:
 | `RESET_USB` | `[0x4A, 0x01]` | Reset USB connection |
 | `RESET_ROASTER` | `[0x20, 0xFF]` | Full roaster reset |
 
+**Complete commands enum** (from `lib/roastime/Command.ts`, with internal IDs):
+
+| ID | Name | Bytes | Description |
+|----|------|-------|-------------|
+| 0 | `SET_DRUM_SPEED` | `[0x32, 0x01, setting, 0x00]` | |
+| 1 | `PSR_BUTTON_COMMAND` | `[0x30, 0x01, 0x00, 0x00]` | ⚠️ same bytes as PAYLOAD_PART_A! Sends PSR button press |
+| 2 | `SET_FAN_SPEED` | `[0x31, fanId, setting, 0x00]` | fanId: 0x00=fan1, 0x03=fan2 |
+| 3 | `SET_INDUCTION_POWER` | `[0x34, 0x00, setting, 0xBA]` | |
+| 4 | `SET_INDUCTION_IGBT_CUTOFF_TEMP` | — | Not in getCommand() switch |
+| 5 | `SET_BEAN_PROBE_GAIN_FACTOR` | — | Calibration |
+| 6 | `SET_BEAN_PROBE_ADC_OFFSET` | — | Calibration |
+| 7 | `SET_BUZZER` | `[0x38, 0x00, setting>>8, setting]` | |
+| 8 | `SET_BLINK` | `[0x39, 0x00, 0x01/0x00, 0x00]` | LED blink on/off |
+| 9 | `SET_PREHEAT_SETPOINT` | `[0x35, 0x00, setting>>8, setting]` | |
+| 10 | `POWER_INCREMENT_SETTING` | `[0x34, 0x01, 0xAA, 0xAA]` | |
+| 11 | `POWER_DECREMENT_SETTING` | `[0x34, 0x02, 0xAA, 0xAA]` | |
+| 12 | `SET_BLOWER_SETTING` | `[0x31, 0x00, setting, 0x00]` | |
+| 13 | `BLOWER_INCREMENT_SETTING` | `[0x31, 0x01, 0xAA, 0xAA]` | |
+| 14 | `BLOWER_DECREMENT_SETTING` | `[0x31, 0x02, 0xAA, 0xAA]` | |
+| 15 | `ENABLE_SELF_TEST_FAN_SENSORS` | — | Diagnostic |
+| 16 | `ENABLE_SELF_TEST_INDUCTION` | — | Diagnostic |
+| 17 | `ENABLE_SELF_TEST_DRUM_SPIN` | — | Diagnostic |
+| 18 | `SAVE_CALIBRATION` | — | Saves calibration to device |
+| 19 | `GET_DEVICE_DATA` | `[0x30, 0x02]` | Read 32 bytes |
+| 20 | `GET_DEVICE_USAGE` | `[0x89, 0x01]` | Read 36 bytes |
+| 21 | `PAYLOAD_PART_A` | `[0x30, 0x01]` | Real-time poll (primary) |
+| 22 | `PAYLOAD_PART_B` | `[0x30, 0x03]` | Extended data poll |
+| 23 | `CLEAR_BUFFER` | `[0x30, 0x05]` | |
+| 24 | `RESET_USB` | `[0x4A, 0x01]` | |
+| 25 | `RESET_ROASTER` | `[0x20, 0xFF]` | |
+| 26 | `GET_ROASTER_STATUS` | `[0x30, 0x99]` | Bootloader/firmware update only |
+
+> ⚠️ `PSR_BUTTON_COMMAND [0x30, 0x01, 0x00, 0x00]` vs `PAYLOAD_PART_A [0x30, 0x01]`: PSR sends 4 bytes while PAYLOAD_PART_A sends 2 bytes. The device distinguishes by packet length.
+
 **settingCommand() mapping (from UI string → USB command):**
 ```
 "power-setting"    → SET_INDUCTION_POWER
@@ -504,29 +644,63 @@ These may contain additional sensor data in newer firmware versions or be paddin
 
 ### State Machine Values (`stateMachine` byte 29)
 
-| Value | State | Description |
-|-------|-------|-------------|
-| `0x0000` | STARTUP | Idle / startup |
-| `0x0002` | PREHEATING | Preheat phase (also 0x0003, 0x0023, 0x0024) |
-| `0x0003` | PREHEATING | — |
-| `0x0004` | CHARGE | Bean charge |
-| `0x0006` | ROASTING | Active roast |
-| `0x0008` | COOLING | Cooling cycle |
-| `0x0009` | COOLDOWN | Cooldown |
-| `0x0023` | PREHEATING | — |
-| `0x0024` | PREHEATING | — |
+**Hardware state machine** (USB Payload A, byte 29):
 
-**Software State enum:**
+| Value | Software State | Description |
+|-------|---------------|-------------|
+| `0x0000` | STARTUP | Idle — device on but not roasting |
+| `0x0002` | PREHEATING | Preheat in progress |
+| `0x0003` | PREHEATING | Preheat in progress (alt) |
+| `0x0004` | CHARGE | Bean charge (beans loaded) |
+| `0x0005` | *(unnamed)* | In VALID_ROASTER_STATES — intermediate transition state |
+| `0x0006` | ROASTING | Active roast in progress |
+| `0x0007` | *(unnamed)* | In VALID_ROASTER_STATES — intermediate transition state |
+| `0x0008` | COOLING | Cooling cycle active |
+| `0x0009` | COOLDOWN | Cooldown (extended) |
+| `0x0023` | PREHEATING | Preheat alternate path (PREHEATING_ROASTER_STATES) |
+| `0x0024` | PREHEATING | Preheat alternate path (PREHEATING_ROASTER_STATES) |
+
+`VALID_ROASTER_STATES = [0x0002, 0x0003, 0x0004, 0x0005, 0x0006, 0x0007, 0x0008, 0x0009, 0x0023, 0x0024]`
+`PREHEATING_ROASTER_STATES = [0x0023, 0x0002, 0x0003, 0x0000]`
+
+**State transition rules (hardware → software state mapping):**
+
 ```
--1 = ISSUE
- 0 = CONNECTED
- 1 = STARTUP
- 2 = PREHEATING
- 3 = CHARGE
- 4 = ROASTING
- 5 = COOLING
- 6 = COOLDOWN
- 7 = OFFLINE
+Hardware 0x0000 (after COOLING/COOLDOWN) → SW STARTUP    → triggers: end active roast
+Hardware PREHEATING_STATES               → SW PREHEATING → triggers: startNewRoast()
+Hardware 0x0004                          → SW CHARGE      → triggers: startNewRoast() if not active
+Hardware 0x0006                          → SW ROASTING    → sets isActive=true
+Hardware 0x0008                          → SW COOLING     → sets isActive=false
+Hardware 0x0009                          → SW COOLDOWN
+```
+
+**Allowed state transitions (UI-safe command table):**
+
+| State | Safe commands |
+|-------|--------------|
+| CONNECTED / OFFLINE | None (wait for device) |
+| STARTUP | `preheat-setpoint`, `SET_BLINK`, `SET_BUZZER` |
+| PREHEATING | `SET_INDUCTION_POWER`, `SET_BLOWER_SETTING`, `SET_DRUM_SPEED`, `SET_PREHEAT_SETPOINT`, `PSR_BUTTON_COMMAND` (charge) |
+| CHARGE | `SET_INDUCTION_POWER`, `SET_BLOWER_SETTING`, `SET_DRUM_SPEED` |
+| ROASTING | All P/F/D controls, `crack-from-device` detection |
+| COOLING | Read-only (machine controls cooling autonomously) |
+| COOLDOWN | Read-only |
+
+> ⚠️ **Safety note**: Sending `SET_INDUCTION_POWER` outside of valid preheat/roast states is untested. The source code does not enforce command whitelisting by state — all commands are accepted at any time. Implement a guard layer in new software.
+
+**Software State enum** (from `lib/roastime/State.ts`):
+```typescript
+enum State {
+  CONNECTED = 0,
+  STARTUP = 1,
+  PREHEATING = 2,
+  CHARGE = 3,
+  ROASTING = 4,
+  COOLING = 5,
+  COOLDOWN = 6,
+  OFFLINE = 7,
+  ISSUE = -1,
+}
 ```
 
 ---
