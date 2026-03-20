@@ -308,6 +308,216 @@ No localhost ports open — all device communication is in-process.
 
 ---
 
+## 7. USB Protocol (v2.x — Full Byte-Level Specification)
+
+> Reverse-engineered from `bg_window/index.js` (webpack bundle, TypeScript source).
+> USB library: `node-usb` (not native NAPI). Interface index: `1`. Endpoints: IN + OUT (bulk transfer).
+
+### Device Identification
+
+```
+AILLIO_VENDOR_IDS  = [0x0483]          // STMicroelectronics
+AILLIO_PRODUCT_IDS = [0x5741, 0xA27E]  // Old firmware, Current firmware
+```
+
+Try `0x5741` first, then `0xA27E`. USB interface `[1]`, claim and detach kernel driver (non-Windows).
+
+### Packet Format
+
+All packets are **fixed 64 bytes** (except device info which is 32 bytes).
+
+- **Send**: `deviceOutEndpoint.transfer(buffer, callback)`
+- **Receive**: `deviceInEndpoint.transfer(N_bytes, callback)`, timeout = 5000ms
+
+### Valid Data Check
+
+Before parsing Payload A, validate:
+```javascript
+data[62] == 0xFF && data[63] == 0xAA && data[41] == 0x0A
+```
+
+### Poll Loop
+
+Runs every **350ms**. Each cycle:
+1. Send `GET_ROASTER_STATUS` → receive **Payload A** (64 bytes)
+2. Send `PAYLOAD_PART_B` → receive **Payload B** (64 bytes)
+
+---
+
+### Command Packets (Send → Device)
+
+| Command | Hex Bytes | Description |
+|---------|-----------|-------------|
+| `GET_ROASTER_STATUS` | `[0x30, 0x99]` | Request real-time status (Payload A) |
+| `PAYLOAD_PART_A` | `[0x30, 0x01]` | Request Payload A (alt) |
+| `PAYLOAD_PART_B` | `[0x30, 0x03]` | Request extended data (Payload B) |
+| `GET_DEVICE_DATA` | `[0x30, 0x02]` | Request device info (32 bytes) |
+| `GET_DEVICE_USAGE` | `[0x89, 0x01]` | Request usage counters (36 bytes) |
+| `CLEAR_BUFFER` | `[0x30, 0x05]` | Flush device buffer |
+| `PSR_BUTTON_COMMAND` | `[0x30, 0x01, 0x00, 0x00]` | Simulate PSR button |
+| `SET_DRUM_SPEED` | `[0x32, 0x01, setting, 0x00]` | Set drum speed (0–9) |
+| `SET_BLOWER_SETTING` | `[0x31, 0x00, setting, 0x00]` | Set fan/blower (0–9) |
+| `SET_FAN_SPEED` | `[0x31, fanId, setting, 0x00]` | fanId: 0x00=fan1, 0x03=fan2 |
+| `SET_INDUCTION_POWER` | `[0x34, 0x00, setting, 0xBA]` | Set power level (0–9) |
+| `POWER_INCREMENT_SETTING` | `[0x34, 0x01, 0xAA, 0xAA]` | Power +1 |
+| `POWER_DECREMENT_SETTING` | `[0x34, 0x02, 0xAA, 0xAA]` | Power -1 |
+| `BLOWER_INCREMENT_SETTING` | `[0x31, 0x01, 0xAA, 0xAA]` | Fan +1 |
+| `BLOWER_DECREMENT_SETTING` | `[0x31, 0x02, 0xAA, 0xAA]` | Fan -1 |
+| `SET_PREHEAT_SETPOINT` | `[0x35, 0x00, setting>>8, setting]` | Preheat target temp |
+| `SET_BUZZER` | `[0x38, 0x00, setting>>8, setting]` | Buzzer control |
+| `SET_BLINK` | `[0x39, 0x00, 0x01/0x00, 0x00]` | LED blink on/off |
+| `RESET_USB` | `[0x4A, 0x01]` | Reset USB connection |
+| `RESET_ROASTER` | `[0x20, 0xFF]` | Full roaster reset |
+
+**settingCommand() mapping (from UI string → USB command):**
+```
+"power-setting"    → SET_INDUCTION_POWER
+"drum-setting"     → SET_DRUM_SPEED
+"fan-setting"      → SET_BLOWER_SETTING
+"power-up"         → POWER_INCREMENT_SETTING
+"power-down"       → POWER_DECREMENT_SETTING
+"fan-up"           → BLOWER_INCREMENT_SETTING
+"fan-down"         → BLOWER_DECREMENT_SETTING
+"preheat-setpoint" → SET_PREHEAT_SETPOINT
+"blink"            → SET_BLINK
+"buzz"             → SET_BUZZER
+```
+
+---
+
+### Response Payload A (64 bytes) — Real-Time Data
+
+> `getFloat(data, offset)` = `Float32Array` from 4 bytes LE
+
+| Offset | Length | Type | Field | Description |
+|--------|--------|------|-------|-------------|
+| 0 | 4 | float32 LE | `beanTemp` | Bean temperature (IBTS) °C |
+| 4 | 4 | float32 LE | `beanRise` | Bean RoR (rate of rise) °C/min |
+| 8 | 4 | float32 LE | `drumTemp` | Drum temperature °C |
+| 12 | 4 | float32 LE | `ibtsRise` | IBTS RoR °C/min |
+| 16 | 4 | float32 LE | `exitTemp` | Exhaust/exit temperature °C |
+| 20 | 4 | uint32 LE | `buttons` | Button bitmask (bit 31 = crack button) |
+| 24 | 1 | uint8 | `minutes` | Elapsed roast time (minutes) |
+| 25 | 1 | uint8 | `seconds` | Elapsed roast time (seconds) |
+| 26 | 1 | uint8 | `blowerSetting` | Current fan setting (0–9) |
+| 27 | 1 | uint8 | `inductionPowerSetting` | Current power setting (0–9) |
+| 28 | 1 | uint8 | `drumSetting` | Current drum speed (0–9) |
+| 29 | 1 | uint8 | `stateMachine` | Roaster state (see state table below) |
+| 30 | 2 | uint16 LE | `sampleNumber` | Sequential sample counter |
+| 32 | 4 | float32 LE | `ambientTemp` | Ambient temperature °C |
+| 36 | 4 | float32 LE | `ambientIRTemp` | Ambient IR temperature °C |
+| 41 | 1 | uint8 | *(valid flag)* | Must be `0x0A` for valid data |
+| 42 | 2 | uint16 LE | `samplesInFIFO` | Samples queued in device FIFO |
+| 44 | 2 | uint16 LE | `blowerRPM` | Blower motor RPM |
+| 48 | 2 | uint16 LE | `inputVoltage` | Input voltage |
+| 52 | 2 | uint16 LE | `coilRPM` | Induction coil RPM |
+| 54 | 2 | uint16 LE | `errorCodes` | Error code flags |
+| 60 | 1 | uint8 | `crc` | CRC byte |
+| 62 | 1 | uint8 | *(valid flag)* | Must be `0xFF` |
+| 63 | 1 | uint8 | *(valid flag)* | Must be `0xAA` |
+
+---
+
+### Response Payload B (64 bytes) — Extended Data
+
+| Offset | Length | Type | Field | Description |
+|--------|--------|------|-------|-------------|
+| 0 | 4 | float32 LE | `beanSoundEnergy` | Acoustic energy (crack detection) |
+| 4 | 4 | float32 LE | `beanSoundBaseline` | Acoustic baseline |
+| 8 | 4 | float32 LE | `rorPreheat` | RoR during preheat phase |
+| 24 | 2 | uint16 LE | `errorCode1` | Error code 1 |
+| 26 | 2 | uint16 LE | `errorValue1` | Error value 1 |
+| 28 | 2 | uint16 LE | `errorCode2` | Error code 2 |
+| 30 | 2 | uint16 LE | `errorValue2` | Error value 2 |
+| 32 | 2 | uint16 LE | `coilRPMFan2` | Fan 2 coil RPM |
+| 34 | 2 | uint16 LE | `currentTest` | Current sensor reading |
+| 36 | 1 | uint8 | `IGBTTemperature` | IGBT heatsink temp |
+| 37 | 1 | uint8 | `IGBT2Temperature` | IGBT 2 temp |
+| 38 | 2 | uint16 LE | `timerPeriod` | Timer period for freq calc (`IGBTFrequency = 40000000 / timerPeriod`) |
+| 40 | 2 | uint16 LE | `pHTemperatureSetting` | pH temperature setting |
+| 42 | 2 | uint16 LE | `IRFanRPM` | IR sensor fan RPM |
+
+---
+
+### Response: GET_DEVICE_DATA (32 bytes)
+
+| Offset | Length | Type | Field |
+|--------|--------|------|-------|
+| 0 | 4 | uint32 LE | `serialNumber` |
+| 4 | 1 | uint8 | `yearManufacturing` |
+| 5 | 1 | uint8 | `monthManufacturing` |
+| 6 | 1 | uint8 | `dayManufacturing` |
+| 7 | 1 | uint8 | `hourManufacturing` |
+| 8 | 4 | uint32 LE | `hardwareVersion` |
+| 10 | 1 | uint8 | `IRSensor` (within hardwareVersion bytes) |
+| 12 | 4 | uint32 LE | `uniqueID1` (hex string) |
+| 16 | 4 | uint32 LE | `uniqueID2` |
+| 20 | 4 | uint32 LE | `uniqueID3` |
+| 24 | 4 | uint32 LE | `firmwareVersion` |
+| 28 | 4 | uint32 LE | `crc` |
+
+---
+
+### State Machine Values (`stateMachine` byte 29)
+
+| Value | State | Description |
+|-------|-------|-------------|
+| `0x0000` | STARTUP | Idle / startup |
+| `0x0002` | PREHEATING | Preheat phase (also 0x0003, 0x0023, 0x0024) |
+| `0x0003` | PREHEATING | — |
+| `0x0004` | CHARGE | Bean charge |
+| `0x0006` | ROASTING | Active roast |
+| `0x0008` | COOLING | Cooling cycle |
+| `0x0009` | COOLDOWN | Cooldown |
+| `0x0023` | PREHEATING | — |
+| `0x0024` | PREHEATING | — |
+
+**Software State enum:**
+```
+-1 = ISSUE
+ 0 = CONNECTED
+ 1 = STARTUP
+ 2 = PREHEATING
+ 3 = CHARGE
+ 4 = ROASTING
+ 5 = COOLING
+ 6 = COOLDOWN
+ 7 = OFFLINE
+```
+
+---
+
+### IPC Transport (bg_window ↔ renderer)
+
+bg_window uses `node-ipc` Unix socket server. Messages are JSON:
+
+**Push (device → UI):**
+```json
+{ "type": "push", "name": "<MSG_TYPE>", "args": { ... } }
+```
+
+**Request/Reply:**
+```json
+// Request:  { "type": "message", "id": "<uuid>", "name": "<handler>", "args": { ... } }
+// Reply:    { "type": "reply", "id": "<uuid>", "result": { ... } }
+// Error:    { "type": "error", "id": "<uuid>", "args": { "error": "..." } }
+```
+
+**MSG_TYPE events:**
+
+| Event name | Payload | Trigger |
+|------------|---------|---------|
+| `state` | `{ state, serialNumber, firmwareVersion, hardwareVersion, irSensor, roastCount, isActive }` | State change |
+| `data` | Full blueprint object (Payload A + B fields) | Every 350ms during roast |
+| `new-roast-from-device` | — | PSR/preheat button pressed |
+| `crack-from-device` | — | Crack button (bit 31 of `buttons`) |
+| `detach-from-device` | `{ error }` | USB disconnect |
+| `error` | `{ errorCode1, errorCode2, errorValue1, errorValue2 }` | Device error |
+| `log-send-started` | — | Log upload begin |
+| `log-send-ended` | — | Log upload complete |
+
+---
+
 ## 7. USB Protocol (v2.x — Complete)
 
 > Source: reverse-engineered from `.webpack/renderer/bg_window/index.js` inside `RoasTime.app/Contents/Resources/app.asar`
